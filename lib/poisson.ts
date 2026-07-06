@@ -138,6 +138,11 @@ export function computeYrfiProbability(lambdaHome: number, lambdaAway: number): 
   return 1 - pHomeScores0 * pAwayScores0
 }
 
+export function computeNrfiProbability(lambdaHome: number, lambdaAway: number): number {
+  // P(NRFI) = P(home scores 0) × P(away scores 0) = e^(-λH) × e^(-λA)
+  return Math.exp(-lambdaHome) * Math.exp(-lambdaAway)
+}
+
 export function breakEvenOdds(p: number): number {
   if (p >= 0.5) return -Math.ceil((100 * p) / (1 - p))
   return Math.ceil((100 * (1 - p)) / p)

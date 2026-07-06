@@ -1,10 +1,12 @@
 @AGENTS.md
 
-# YRFI — Project Context for Claude
+# SHARPRFI — Project Context for Claude
 
 ## What This Project Is
 
-A Next.js MLB betting tool that calculates YRFI (Yes Run First Inning) probabilities using a Poisson model. Users see each game's YRFI % and the minimum American odds needed for a +EV bet. No sportsbook integration — model output only.
+A Next.js MLB betting tool that models first-inning scoring with a Poisson model and serves **both sides of the bet behind a header toggle**: NRFI (no run in the 1st) and YRFI (at least one run). Users see each game's probability for the active view and the minimum American odds needed for a +EV bet. No sportsbook integration — model output only.
+
+Formerly two mirrored sites (bet-nrfi / bet-yrfi), merged in July 2026. The API computes the canonical YRFI probability; the NRFI view derives `1 − p`, its own break-even odds, sort order, colors, and copy client-side via `lib/mode.ts`. NRFI mode uses a red accent, YRFI green.
 
 **Stack:** Next.js App Router, React 19, Tailwind v4, TypeScript, Vercel KV
 
@@ -30,7 +32,9 @@ This project uses a Next.js version with breaking changes from training data. **
 | File | Role |
 |---|---|
 | `app/api/games/route.ts` | Main API endpoint — orchestrates all data fetching and model execution |
-| `lib/poisson.ts` | λ calculation, P(YRFI), break-even odds |
+| `lib/poisson.ts` | λ calculation, P(YRFI) + P(NRFI), break-even odds |
+| `lib/mode.ts` | NRFI/YRFI view helpers: viewProbability, viewOdds, sortForMode, MODE_ACCENT classes |
+| `lib/yrfi-color.ts`, `lib/nrfi-color.ts` | Probability text-color gradients, one normalization range per view |
 | `lib/mlb-api.ts` | MLB Stats API calls (schedule, pitcher stats, team OBP, boxscore) |
 | `lib/savant-api.ts` | Baseball Savant CSV fetch + KV cache |
 | `lib/weather-api.ts` | Open-Meteo fetch; hardcoded stadium lat/lon/outfieldFacingDegrees for all 30 parks |
@@ -38,7 +42,7 @@ This project uses a Next.js version with breaking changes from training data. **
 | `lib/game-status.ts` | `computeFirstInningResult()` — reads linescore innings[0] |
 | `lib/kv.ts` | Vercel KV wrapper with in-memory fallback (always use this, never import KV directly) |
 | `lib/types.ts` | All shared types: GameResult, PitcherStats, SavantStats, WeatherData, GamesResponse |
-| `app/context/SettingsContext.tsx` | User preferences (tempUnit, windUnit, oddsFormat, timezone) — localStorage backed |
+| `app/context/SettingsContext.tsx` | User preferences (mode, tempUnit, windUnit, oddsFormat, timezone) — localStorage backed (`sharprfi-settings`) |
 | `app/components/ClientShell.tsx` | Root client component; owns all state and polling |
 
 ---
@@ -46,7 +50,7 @@ This project uses a Next.js version with breaking changes from training data. **
 ## Model Constants (in `lib/poisson.ts`)
 
 ```ts
-BASE_LAMBDA = 0.50
+BASE_LAMBDA = 0.3371   // recalibrated on 2023–2025 pitch-clock era backtest
 LEAGUE_AVG_FIP = 3.80
 LEAGUE_AVG_K_PCT = 0.23
 LEAGUE_AVG_BARREL_PCT = 8.0   // 0–100 scale
@@ -64,6 +68,7 @@ Update these at the start of each season.
 λ_half = BASE_LAMBDA × FIP_factor × K%_factor × barrel_factor × OBP_factor × park_factor × temp_factor × wind_factor
 
 P(YRFI) = 1 − e^(−λ_home) × e^(−λ_away)
+P(NRFI) = 1 − P(YRFI)
 ```
 
 Wind factor requires `outfieldFacingDegrees` from the stadium constants in `weather-api.ts`. Wind direction from Open-Meteo is the direction the wind comes **from**.
@@ -93,12 +98,12 @@ Wind factor requires `outfieldFacingDegrees` from the stadium constants in `weat
 ## UI Conventions
 
 - **Tailwind v4** — use `@import "tailwindcss"` syntax, not `@tailwind` directives
-- **Color palette:** White base, `green-600` (`#16a34a`) accent, slate for secondary text
+- **Color palette:** White base, slate for secondary text; mode-dependent accent via `MODE_ACCENT` in `lib/mode.ts` — `green-600` in YRFI mode, `red-600` in NRFI mode. Result badges are semantic (green = active view's bet won), MatchupDetail greens are semantic — never theme those by mode
 - **Responsive:** `sm:hidden` / `hidden sm:block` pattern for mobile cards vs desktop table
 - **Game grouping:** Upcoming → In Progress → Settled
 - **Date anchor:** Pacific calendar day (`America/Los_Angeles`) for slate date
 - **Matchup labels:** Use team nicknames in matchup display, not full city-plus-team names
-- **YRFI display:** Show percentages to one decimal place
+- **Probability display:** Show the active view's percentage (YRFI or NRFI = 1 − YRFI) to two decimal places
 - **Result states:** Upcoming = `—`, pending in-progress first inning = `IP`, run scored = `RUN`, scoreless first inning = `NO RUN`
 - **Desktop compact columns:** Temp, Wind, Time, and Result are centered fixed-width columns for consistent alignment
 

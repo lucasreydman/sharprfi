@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSettings, TIMEZONES } from '@/app/context/SettingsContext'
+import { MODE_ACCENT } from '@/lib/mode'
 
 const triggerClass = 'min-h-10 w-full rounded-full px-4 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:w-auto sm:px-4 sm:py-1.5'
 
@@ -18,11 +19,13 @@ function SegmentRow({
   label,
   options,
   value,
+  activeClass,
   onChange,
 }: {
   label: string
   options: { label: string; value: string }[]
   value: string
+  activeClass: string
   onChange: (v: string) => void
 }) {
   return (
@@ -36,7 +39,7 @@ function SegmentRow({
             onClick={() => onChange(opt.value)}
             className={`flex-1 whitespace-nowrap px-3 py-2 transition-colors ${
               value === opt.value
-                ? 'bg-green-600 text-white'
+                ? activeClass
                 : 'bg-white text-slate-600 hover:bg-slate-50'
             }`}
           >
@@ -50,6 +53,7 @@ function SegmentRow({
 
 export default function ConfigPanel() {
   const { settings, update } = useSettings()
+  const accent = MODE_ACCENT[settings.mode]
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -95,7 +99,7 @@ export default function ConfigPanel() {
         onClick={() => setOpen(o => !o)}
         className={`flex items-center justify-center gap-2 ${triggerClass} ${
           open
-            ? 'bg-green-600 text-white'
+            ? accent.solid
             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
         }`}
         aria-label="Preferences"
@@ -131,6 +135,7 @@ export default function ConfigPanel() {
               label="Temperature"
               options={[{ label: '°F', value: 'F' }, { label: '°C', value: 'C' }]}
               value={settings.tempUnit}
+              activeClass={accent.solid}
               onChange={v => update({ tempUnit: v as 'F' | 'C' })}
             />
 
@@ -138,6 +143,7 @@ export default function ConfigPanel() {
               label="Wind speed"
               options={[{ label: 'mph', value: 'mph' }, { label: 'km/h', value: 'kmh' }]}
               value={settings.windUnit}
+              activeClass={accent.solid}
               onChange={v => update({ windUnit: v as 'mph' | 'kmh' })}
             />
 
@@ -145,6 +151,7 @@ export default function ConfigPanel() {
               label="Odds format"
               options={[{ label: 'American', value: 'american' }, { label: 'Decimal', value: 'decimal' }]}
               value={settings.oddsFormat}
+              activeClass={accent.solid}
               onChange={v => update({ oddsFormat: v as 'american' | 'decimal' })}
             />
 
@@ -154,7 +161,7 @@ export default function ConfigPanel() {
                 aria-label="Time zone"
                 value={settings.timezone}
                 onChange={e => update({ timezone: e.target.value })}
-                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                className={`w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 ${accent.ring}`}
               >
                 {TIMEZONES.map(tz => (
                   <option key={tz.value} value={tz.value}>{tz.label}</option>
