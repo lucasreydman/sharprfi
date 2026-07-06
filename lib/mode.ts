@@ -35,17 +35,20 @@ export const MODE_ACCENT: Record<ViewMode, {
   solidHover: string
   ring: string
   link: string
+  brandText: string
 }> = {
   yrfi: {
     solid: 'bg-green-600 text-white',
     solidHover: 'bg-green-600 text-white hover:bg-green-700',
     ring: 'focus:ring-green-500',
     link: 'text-green-700 underline decoration-green-200 underline-offset-2 transition-colors hover:text-green-800',
+    brandText: 'text-green-600',
   },
   nrfi: {
     solid: 'bg-red-600 text-white',
     solidHover: 'bg-red-600 text-white hover:bg-red-700',
     ring: 'focus:ring-red-500',
     link: 'text-red-700 underline decoration-red-200 underline-offset-2 transition-colors hover:text-red-800',
+    brandText: 'text-red-600',
   },
 }

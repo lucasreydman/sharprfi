@@ -84,7 +84,7 @@ const MODE_COPY: Record<ViewMode, ModeCopy> = {
       </>
     ),
     indicatorLabel: 'YRFI',
-    step2Title: 'Step 2 — Compute P(YRFI) from both λ values',
+    step2Title: 'Engine 1: Poisson — Step 2 — Compute P(YRFI) from both λ values',
     step2Trigger: (
       <>
         YRFI hits when <em>either</em> team scores, so:
@@ -98,7 +98,7 @@ const MODE_COPY: Record<ViewMode, ModeCopy> = {
         <InlineMath math={String.raw`\lambda = 0.3371`} />, which gives <InlineMath math={String.raw`P(\mathrm{YRFI}) = 1 - e^{-0.6742} \approx 49.05\%`} />.
       </>
     ),
-    step3Lead: 'The "Bet at" column shows the worst odds at which a YRFI bet still has positive expected value. If the sportsbook offers better odds than this, the bet is +EV.',
+    step3Lead: 'The headline YRFI probability is the simple average of the two engines. The "Bet at" column then shows the worst odds at which a YRFI bet still has positive expected value at that blended probability. If the sportsbook offers better odds than this, the bet is +EV.',
   },
   nrfi: {
     accentText: 'text-red-700',
@@ -134,7 +134,7 @@ const MODE_COPY: Record<ViewMode, ModeCopy> = {
       </>
     ),
     indicatorLabel: 'NRFI',
-    step2Title: 'Step 2 — Compute P(NRFI) from both λ values',
+    step2Title: 'Engine 1: Poisson — Step 2 — Compute P(NRFI) from both λ values',
     step2Trigger: (
       <>
         NRFI hits when <em>neither</em> team scores, so both half-innings must be scoreless:
@@ -149,7 +149,7 @@ const MODE_COPY: Record<ViewMode, ModeCopy> = {
         This is verified against the 2023–2025 backtested rate of <InlineMath math={String.raw`3715 / 7290 \approx 50.95\%`} /> NRFI.
       </>
     ),
-    step3Lead: 'The "Bet at" column shows the worst odds at which an NRFI bet still has positive expected value. If the sportsbook offers better odds than this, the bet is +EV.',
+    step3Lead: 'The headline NRFI probability is the simple average of the two engines. The "Bet at" column then shows the worst odds at which an NRFI bet still has positive expected value at that blended probability. If the sportsbook offers better odds than this, the bet is +EV.',
   },
 }
 
@@ -219,10 +219,12 @@ T>80^\circ\!F&\to1.06,\ \mathrm{else}\to1.00
 ] as const
 
 const caveats = [
-  'Lineup context beyond the fifth hitter, whose first-inning plate appearance probability drops below 30%',
+  'The Poisson engine\'s lineup factor covers only the top five hitters (the simulation covers the full order, but hitters 6–9 rarely bat in the first inning anyway)',
   'Bullpen usage or opener strategies',
   'In-game factors like pitch count, injury, or weather changes mid-game',
   'Umpire tendencies or day/night splits',
+  'The simulation\'s base advancement is station-to-station — no steals, errors, sacrifices, or wild pitches; a global calibration constant compensates in aggregate but not per matchup',
+  'The simulation does not use weather — only the Poisson engine sees temperature and wind',
   'Early-season data is stabilized, but still noisier than midseason',
 ] as const
 
@@ -270,7 +272,7 @@ export default function MethodologyView() {
       </Section>
 
       {/* Step 1 */}
-      <Section title="Step 1 — Estimate λ (expected runs) for each half-inning">
+      <Section title="Engine 1: Poisson — Step 1 — Estimate λ (expected runs) for each half-inning">
         <p className="mb-3 leading-relaxed">
           <InlineMath math={String.raw`\lambda`} /> represents the expected number of runs scored by one team in the first inning.
           The model starts from a baseline of <InlineMath math="0.3371" />{' '}for one team&apos;s half-inning.
@@ -317,25 +319,10 @@ export default function MethodologyView() {
         </p>
       </Section>
 
-      {/* Step 3 */}
-      <Section title="Step 3 — Convert probability to break-even American odds">
+      {/* Engine 2: Monte Carlo sim */}
+      <Section title="Engine 2 — batter-level Monte Carlo simulation">
         <p className="mb-3 leading-relaxed">
-          {copy.step3Lead}
-        </p>
-        <OddsFormulaBlock math={oddsMath} className="mb-3" />
-        <p className="mt-3 text-slate-500 text-xs leading-relaxed">
-          The ceiling function is used instead of rounding so the threshold is always conservative,
-          you need odds <em>at least</em> this good, not just approximately this good.
-          A <Mono>~</Mono> prefix means one or both probable starters are still TBD, or a named starter still relies on fallback pitcher inputs.
-          Odds stay visible unless a probable starter is still TBD.
-        </p>
-      </Section>
-
-      {/* Hybrid engine */}
-      <Section title="The second engine — batter-level Monte Carlo">
-        <p className="mb-3 leading-relaxed">
-          Since July 2026 the headline number is a 50/50 blend of the Poisson model above and a{' '}
-          batter-level Monte Carlo simulation contributed by <strong>Francisco Renteria Nevarez</strong> and
+          The second engine was contributed by <strong>Francisco Renteria Nevarez</strong> in July 2026 and
           adapted for this site. For each game it simulates the first inning 10,000 times: every batter in the
           confirmed order gets a reach-base probability from their season{' '}
           <a
@@ -347,15 +334,37 @@ export default function MethodologyView() {
             wOBA
           </a>{' '}
           (shrunk toward league average in small samples), adjusted for the platoon matchup against the
-          opposing starter&apos;s handedness, the starter&apos;s OBP-allowed, and the park. Walks advance runners
-          only when forced; hits advance them station-to-station with an MLB-average hit-type split. The share of
-          innings with at least one run is that half-inning&apos;s scoring probability.
+          opposing starter&apos;s handedness, the starter&apos;s OBP-allowed relative to league, and the park.
+          Walks advance runners only when forced; hits advance them station-to-station with an MLB-average
+          hit-type split (65% singles, 20% doubles, 3% triples, 12% home runs). The share of simulated innings
+          with at least one run is that half-inning&apos;s scoring probability, and the two half-innings combine
+          exactly as in Engine 1.
         </p>
         <p className="text-slate-500 text-xs leading-relaxed">
-          On a 1,344-game 2026 backtest the blend scored a better Brier than either engine alone
-          (0.2447 vs 0.2476 Poisson / 0.2463 sim) with a calibration gap of +1.2%, and spreads its predictions
-          meaningfully wider — games it rates 60–70% have hit 66.7%. Both engines are shown side by side in every
-          matchup&apos;s detail panel.
+          The simulation is deterministic per game (a fixed per-game random seed), and a single global
+          calibration constant is tuned so league-average inputs reproduce the observed 49.05% YRFI base rate —
+          the same neutral-baseline validation Engine 1 went through. Both engines are shown side by side in
+          every matchup&apos;s detail panel.
+        </p>
+      </Section>
+
+      {/* Final step: blend + odds */}
+      <Section title="Final step — blend the engines and convert to break-even odds">
+        <p className="mb-3 leading-relaxed">
+          {copy.step3Lead}
+        </p>
+        <OddsFormulaBlock math={oddsMath} className="mb-3" />
+        <p className="mt-3 text-slate-500 text-xs leading-relaxed">
+          The 50/50 blend is not a stylistic choice — it won a 1,344-game 2026 backtest outright
+          (Brier 0.2447 vs 0.2476 for Poisson alone and 0.2463 for the simulation alone, calibration gap +1.2%),
+          and it spreads predictions meaningfully wider: games it rates 60–70% have hit 66.7%. The contributed
+          model&apos;s team-win-streak multipliers were tested in the same backtest and rejected.
+          The ceiling function is used instead of rounding so the threshold is always conservative,
+          you need odds <em>at least</em> this good, not just approximately this good.
+          A <Mono>~</Mono> prefix means one or both probable starters are still TBD, or a named starter still relies on fallback pitcher inputs.
+          Odds stay visible unless a probable starter is still TBD. To price a specific bet, every matchup&apos;s
+          detail panel includes a &quot;Bet value&quot; calculator: enter your book&apos;s odds to get the implied
+          probability, expected value per unit, and a banded verdict.
         </p>
       </Section>
 
@@ -375,7 +384,7 @@ export default function MethodologyView() {
       <Section title="Data sources">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {[
-            { name: 'MLB Stats API', url: 'https://github.com/toddrob99/MLB-StatsAPI', detail: 'Provides schedule data, pitcher season stats for FIP inputs, and team OBP. Free to use with no key required.' },
+            { name: 'MLB Stats API', url: 'https://github.com/toddrob99/MLB-StatsAPI', detail: 'Provides schedule data, pitcher season stats (FIP inputs and OBP-allowed), team OBP, per-batter counting stats, and batter/pitcher handedness. Free to use with no key required.' },
             { name: 'Baseball Savant', url: 'https://baseballsavant.mlb.com', detail: 'Provides Statcast barrel rate and hard-hit rate data through free CSV downloads.' },
             { name: 'FanGraphs', url: 'https://www.fangraphs.com/guts.aspx?type=pfh', detail: 'Provides park factors on a 1.00 scale. These values are hardcoded by season and updated annually.' },
             { name: 'Open-Meteo', url: 'https://open-meteo.com', detail: 'Provides hourly temperature, wind speed, and wind direction forecasts. Free to use with no key required.' },

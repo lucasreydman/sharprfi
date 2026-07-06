@@ -10,7 +10,6 @@ import MethodologyView from './MethodologyView'
 import ConfigPanel from './ConfigPanel'
 import { SettingsProvider, useSettings } from '@/app/context/SettingsContext'
 import { MODE_ACCENT, MODE_LABELS, type ViewMode } from '@/lib/mode'
-import { SITE_NAME } from '@/lib/site'
 
 const mobilePillClass = 'min-h-10 rounded-full px-4 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:px-4 sm:py-1.5'
 
@@ -119,7 +118,9 @@ function Shell() {
       <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 md:flex-row md:items-center md:justify-between md:gap-4">
         <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:gap-3">
           <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
-            <h1 className="text-[1.75rem] font-bold leading-none tracking-tight text-slate-900 sm:text-[2rem]">{SITE_NAME}</h1>
+            <h1 className="text-[1.75rem] font-bold leading-none tracking-tight text-slate-900 sm:text-[2rem]">
+              <span className={`transition-colors ${accent.brandText}`}>SHARP</span>RFI
+            </h1>
             <span className="text-xs font-semibold tracking-tight text-slate-400 sm:text-sm">.vercel.app</span>
           </div>
           <span className="max-w-xl text-xs leading-snug text-slate-400 sm:text-sm">
@@ -240,15 +241,7 @@ function Shell() {
       <footer className="border-t border-slate-100 px-4 py-5 text-sm text-slate-500">
         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
           <span>
-            Built by{' '}
-            <a
-              href="https://lucasreydman.xyz"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`font-medium ${accent.link}`}
-            >
-              Lucas Reydman
-            </a>
+            Built by <span className="font-medium text-slate-600">Lucas Reydman &amp; Francisco Renteria Nevarez</span>
           </span>
         </div>
       </footer>
