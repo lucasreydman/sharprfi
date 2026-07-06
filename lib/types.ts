@@ -54,7 +54,14 @@ export interface GameResult {
   topOfOrderOBP: { home: number | null; away: number | null }
   parkFactor: number
   lambda: { home: number; away: number }
-  yrfiProbability: number  // 0–1
+  yrfiProbability: number  // 0–1 — headline probability (engine per modelUsed)
+  poissonYrfiProbability: number   // Poisson engine output
+  simYrfiProbability: number | null // Monte Carlo sim engine output (null if sim inputs unavailable)
+  modelUsed: 'poisson' | 'sim' | 'blend'
+  simDetails: {
+    home: { pScore: number; expectedRuns: number; expectedHits: number }
+    away: { pScore: number; expectedRuns: number; expectedHits: number }
+  } | null
   breakEvenOdds: number    // American odds integer (positive or negative)
   lineupConfirmed: boolean // true when both teams' confirmed top-5 batting order is factored in
   lineupDetails: LineupDetails

@@ -44,3 +44,6 @@ next-env.d.ts
 .vercel
 
 .env*.local
+
+# Private correspondence + contributed originals (not for the public repo)
+/francisco/

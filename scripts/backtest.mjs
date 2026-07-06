@@ -267,6 +267,236 @@ async function fetchText(url) {
   throw new Error(`Request failed after retries: ${url}`)
 }
 
+// ============================================================
+// Monte Carlo sim engine (mirror of lib/sim.ts — Francisco Renteria Nevarez's
+// model with agreed fixes; `faithful` option reproduces his original code:
+// no pitcher effect, 4 batters, walks drawn from the hit-type table)
+// ============================================================
+const SIM_LEAGUE_AVG_WOBA = 0.310
+const SIM_LEAGUE_AVG_OBP = 0.313
+const SIM_WOBA_WEIGHTS = { BB: 0.69, HBP: 0.72, '1B': 0.88, '2B': 1.25, '3B': 1.60, HR: 2.00 }
+const SIM_PROB_SINGLE = 0.65
+const SIM_PROB_DOUBLE = 0.20
+const SIM_PROB_TRIPLE = 0.03
+const SIM_PLATOON_SAME = -0.015
+const SIM_PLATOON_DIFFERENT = 0.020
+const SIM_ITERATIONS = 10000
+const SIM_STREAK_FACTORS = { 0: 1.00, 1: 1.05, 2: 1.10, 3: 1.15, 4: 1.20, 5: 1.25 }
+// Neutral-baseline calibration (league-average inputs → 49.05% YRFI); see lib/sim.ts
+const SIM_REACH_CALIBRATION = 1.2333
+
+function mulberry32(seed) {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function simBatterTrustWeight(pa) {
+  if (!Number.isFinite(pa) || pa <= 0) return 0.15
+  return Math.min(pa / 30, 1.0)
+}
+
+function simPitcherTrustWeight(tbf) {
+  if (!Number.isFinite(tbf) || tbf <= 0) return 0.15
+  return Math.min(tbf * 0.10, 1.0)
+}
+
+function simShrink(value, weight, leagueAvg) {
+  return value * weight + leagueAvg * (1 - weight)
+}
+
+function simComputeWoba(b) {
+  if (!Number.isFinite(b.plateAppearances) || b.plateAppearances <= 0) return SIM_LEAGUE_AVG_WOBA
+  const numerator =
+    b.singles * SIM_WOBA_WEIGHTS['1B'] + b.doubles * SIM_WOBA_WEIGHTS['2B'] +
+    b.triples * SIM_WOBA_WEIGHTS['3B'] + b.homeRuns * SIM_WOBA_WEIGHTS.HR +
+    b.walks * SIM_WOBA_WEIGHTS.BB + b.hitByPitch * SIM_WOBA_WEIGHTS.HBP
+  return Math.min(Math.max(numerator / b.plateAppearances, 0), 1)
+}
+
+function simApplyPlatoon(woba, batSide, pitchHand) {
+  if (!batSide || !pitchHand || batSide === 'S' || pitchHand === 'S') return woba
+  return woba + (batSide === pitchHand ? SIM_PLATOON_SAME : SIM_PLATOON_DIFFERENT)
+}
+
+function simLeagueAverageBatter() {
+  return { singles: 0, doubles: 0, triples: 0, homeRuns: 0, walks: 0, hitByPitch: 0, plateAppearances: 0, batSide: null }
+}
+
+function simPrepareBatters(batters, pitcher, parkFactor, streakFactor, options) {
+  const pitcherObp = simShrink(pitcher.obpAllowed ?? SIM_LEAGUE_AVG_OBP, simPitcherTrustWeight(pitcher.battersFaced), SIM_LEAGUE_AVG_OBP)
+  const pitcherMultiplier = options.faithful ? 1.0 : pitcherObp / SIM_LEAGUE_AVG_OBP
+  const parkMultiplier = Math.sqrt(parkFactor)
+  let roster = batters.length > 0 ? batters : [simLeagueAverageBatter()]
+  if (options.faithful) roster = roster.slice(0, 4)
+
+  return roster.map(b => {
+    const raw = simComputeWoba(b)
+    const shrunk = simShrink(raw, simBatterTrustWeight(b.plateAppearances), SIM_LEAGUE_AVG_WOBA)
+    const withPlatoon = simApplyPlatoon(shrunk, b.batSide, pitcher.pitchHand)
+    const calibration = options.faithful ? 1.0 : SIM_REACH_CALIBRATION
+    const pReach = Math.min(Math.max(withPlatoon * calibration * pitcherMultiplier * parkMultiplier * streakFactor, 0.05), 0.95)
+    const walks = b.walks + b.hitByPitch
+    const hits = b.singles + b.doubles + b.triples + b.homeRuns
+    const onBaseEvents = walks + hits
+    const pWalkGivenReach = options.faithful ? 0 : (onBaseEvents > 0 ? walks / onBaseEvents : 0.30)
+    return { pReach, pWalkGivenReach }
+  })
+}
+
+function simHalfInning(batters, pitcher, parkFactor, streakFactor, rng, options) {
+  const prepared = simPrepareBatters(batters, pitcher, parkFactor, streakFactor, options)
+  let scoringInnings = 0
+
+  for (let sim = 0; sim < SIM_ITERATIONS; sim++) {
+    let outs = 0
+    let runs = 0
+    let first = false, second = false, third = false
+    let batterIndex = 0
+
+    while (outs < 3) {
+      // Faithful mode reproduces the original truncation: the inning simply
+      // ends when the 4-batter list is exhausted
+      if (options.faithful && batterIndex >= prepared.length) break
+      const batter = prepared[batterIndex % prepared.length]
+      batterIndex++
+
+      if (rng() >= batter.pReach) { outs++; continue }
+
+      if (rng() < batter.pWalkGivenReach) {
+        if (first && second && third) runs++
+        else if (first && second) third = true
+        else if (first) second = true
+        first = true
+        continue
+      }
+
+      const roll = rng()
+      if (roll < SIM_PROB_SINGLE) {
+        if (third) { runs++; third = false }
+        if (second) { third = true; second = false }
+        if (first) { second = true; first = false }
+        first = true
+      } else if (roll < SIM_PROB_SINGLE + SIM_PROB_DOUBLE) {
+        if (third) { runs++; third = false }
+        if (second) { runs++; second = false }
+        if (first) { third = true; first = false }
+        second = true
+      } else if (roll < SIM_PROB_SINGLE + SIM_PROB_DOUBLE + SIM_PROB_TRIPLE) {
+        if (third) { runs++; third = false }
+        if (second) { runs++; second = false }
+        if (first) { runs++; first = false }
+        third = true
+      } else {
+        if (third) { runs++; third = false }
+        if (second) { runs++; second = false }
+        if (first) { runs++; first = false }
+        runs++
+      }
+    }
+
+    if (runs > 0) scoringInnings++
+  }
+
+  return scoringInnings / SIM_ITERATIONS
+}
+
+function simGameYrfi({ gamePk, parkFactor, awayBatters, homeBatters, awayPitcher, homePitcher, awayStreakFactor = 1.0, homeStreakFactor = 1.0, faithful = false }) {
+  const rng = mulberry32(gamePk)
+  const options = { faithful }
+  const pAway = simHalfInning(awayBatters, homePitcher, parkFactor, awayStreakFactor, rng, options)
+  const pHome = simHalfInning(homeBatters, awayPitcher, parkFactor, homeStreakFactor, rng, options)
+  return 1 - (1 - pAway) * (1 - pHome)
+}
+
+function extractSimLineup(players) {
+  if (!players) return []
+  return Object.values(players)
+    .filter(player => {
+      const order = Number.parseInt(player.battingOrder ?? '', 10)
+      return Number.isFinite(order) && order >= 100 && order <= 900 && order % 100 === 0
+    })
+    .sort((left, right) => Number.parseInt(left.battingOrder ?? '0', 10) - Number.parseInt(right.battingOrder ?? '0', 10))
+    .slice(0, 9)
+    .map(player => {
+      const batting = player.seasonStats?.batting ?? {}
+      const hits = batting.hits ?? 0
+      const doubles = batting.doubles ?? 0
+      const triples = batting.triples ?? 0
+      const homeRuns = batting.homeRuns ?? 0
+      return {
+        personId: player.person?.id ?? 0,
+        singles: Math.max(hits - doubles - triples - homeRuns, 0),
+        doubles,
+        triples,
+        homeRuns,
+        walks: batting.baseOnBalls ?? 0,
+        hitByPitch: batting.hitByPitch ?? 0,
+        plateAppearances: batting.plateAppearances ?? 0,
+        batSide: null, // filled from handedness cache
+      }
+    })
+}
+
+async function fetchHandednessBatch(personIds, handednessCache) {
+  const missing = [...new Set(personIds.filter(id => id > 0 && !handednessCache.has(id)))]
+  if (missing.length === 0) return
+  for (let i = 0; i < missing.length; i += 100) {
+    const chunk = missing.slice(i, i + 100)
+    try {
+      const data = await fetchJson(`https://statsapi.mlb.com/api/v1/people?personIds=${chunk.join(',')}&fields=people,id,batSide,pitchHand,code`)
+      for (const person of data.people ?? []) {
+        handednessCache.set(person.id, {
+          batSide: ['L', 'R', 'S'].includes(person.batSide?.code) ? person.batSide.code : null,
+          pitchHand: ['L', 'R', 'S'].includes(person.pitchHand?.code) ? person.pitchHand.code : null,
+        })
+      }
+    } catch {
+      // leave missing entries null-handed
+    }
+    for (const id of chunk) {
+      if (!handednessCache.has(id)) handednessCache.set(id, { batSide: null, pitchHand: null })
+    }
+  }
+}
+
+// Win streak entering `beforeDate`, from the season schedule already in memory
+function buildTeamResults(scheduleByDate) {
+  const results = new Map() // teamId -> [{date, won}] in date order
+  const dates = [...scheduleByDate.keys()].sort()
+  for (const date of dates) {
+    for (const game of scheduleByDate.get(date)) {
+      const homeWin = game.teams?.home?.isWinner
+      const awayWin = game.teams?.away?.isWinner
+      if (typeof homeWin !== 'boolean' || typeof awayWin !== 'boolean') continue
+      for (const [side, won] of [['home', homeWin], ['away', awayWin]]) {
+        const teamId = game.teams[side].team.id
+        if (!results.has(teamId)) results.set(teamId, [])
+        results.get(teamId).push({ date, won })
+      }
+    }
+  }
+  return results
+}
+
+function winStreakBefore(teamResults, teamId, beforeDate) {
+  const games = teamResults.get(teamId)
+  if (!games) return 0
+  let streak = 0
+  for (let i = games.length - 1; i >= 0; i--) {
+    if (games[i].date >= beforeDate) continue
+    if (!games[i].won) break
+    streak++
+    if (streak >= 5) break
+  }
+  return streak
+}
+
 async function fetchSchedule(date) {
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=probablePitcher,lineups`
   const data = await fetchJson(url)
@@ -343,9 +573,10 @@ async function fetchPitcherStats(playerId, season, date, taperMode = 'info') {
   const url = `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=season&group=pitching&season=${season}`
   const data = await fetchJson(url)
   const stat = data.stats?.[0]?.splits?.[0]?.stat
-  if (!stat) return { fip: LEAGUE_AVG_FIP, kPct: LEAGUE_AVG_K_PCT, usedFallback: true }
+  if (!stat) return { fip: LEAGUE_AVG_FIP, kPct: LEAGUE_AVG_K_PCT, obpAllowed: null, battersFaced: 0, usedFallback: true }
   const inningsPitched = parseIp(stat.inningsPitched)
   const battersFaced = stat.battersFaced ?? 0
+  const parsedObpAllowed = Number.parseFloat(stat.obp ?? '')
   const rawFip = inningsPitched === 0
     ? LEAGUE_AVG_FIP
     : (13 * stat.homeRuns + 3 * (stat.baseOnBalls + stat.hitByPitch) - 2 * stat.strikeOuts) / inningsPitched + FIP_CONSTANT
@@ -355,6 +586,8 @@ async function fetchPitcherStats(playerId, season, date, taperMode = 'info') {
   return {
     fip: shrinkTowardAverage(rawFip, LEAGUE_AVG_FIP, inningsPitched, fipStabilization),
     kPct: shrinkTowardAverage(rawKPct, LEAGUE_AVG_K_PCT, battersFaced, kStabilization),
+    obpAllowed: Number.isFinite(parsedObpAllowed) ? parsedObpAllowed : null,
+    battersFaced,
     usedFallback: false,
   }
 }
@@ -405,6 +638,8 @@ async function fetchLineupStats(gamePk, date, taperMode = 'info') {
   return {
     home: extractTopOfOrderObp(teams?.home?.players, date, taperMode),
     away: extractTopOfOrderObp(teams?.away?.players, date, taperMode),
+    simHome: extractSimLineup(teams?.home?.players),
+    simAway: extractSimLineup(teams?.away?.players),
   }
 }
 
@@ -532,19 +767,17 @@ async function run() {
   const args = process.argv.slice(2)
   const compareMode = args.includes('--compare')
   const compareTapersMode = args.includes('--compare-tapers')
+  const compareSimMode = args.includes('--compare-sim')
   const actualOnlyMode = args.includes('--actual-only')
   const resumeMode = !args.includes('--no-resume')
-  const positionalArgs = args.filter(arg => arg !== '--compare')
-    .filter(arg => arg !== '--compare-tapers')
-    .filter(arg => arg !== '--actual-only')
-    .filter(arg => arg !== '--no-resume')
+  const positionalArgs = args.filter(arg => !arg.startsWith('--'))
   const [startArg, endArg] = positionalArgs
   if (!startArg || !endArg) {
-    console.error('Usage: npm run backtest -- YYYY-MM-DD YYYY-MM-DD [--compare] [--compare-tapers] [--actual-only] [--no-resume]')
+    console.error('Usage: npm run backtest -- YYYY-MM-DD YYYY-MM-DD [--compare] [--compare-tapers] [--compare-sim] [--actual-only] [--no-resume]')
     process.exit(1)
   }
 
-  const runMode = actualOnlyMode ? 'actual-only' : compareTapersMode ? 'compare-tapers' : compareMode ? 'compare' : 'single'
+  const runMode = actualOnlyMode ? 'actual-only' : compareSimMode ? 'compare-sim' : compareTapersMode ? 'compare-tapers' : compareMode ? 'compare' : 'single'
   const cacheDir = path.join(process.cwd(), '.backtest-cache', BACKTEST_CACHE_VERSION, `${startArg}_${endArg}_${runMode}`)
   if (resumeMode) {
     await ensureCacheDir(cacheDir)
@@ -558,13 +791,24 @@ async function run() {
   const teamCache = new Map()
   const weatherCache = new Map()
   const lineupCache = new Map()
+  const handednessCache = new Map()
   const predictions = []
   const legacyPredictions = []
   const infoPredictions = []
+  const simFixedPredictions = []
+  const simStreakPredictions = []
+  const simFaithfulPredictions = []
   const seenGamePks = new Set()
 
   for (const { year, startDate, endDate } of seasonBounds) {
     seasonScheduleMaps.set(year, await fetchSeasonScheduleMap(startDate, endDate))
+  }
+
+  const teamResultsMaps = new Map()
+  if (compareSimMode) {
+    for (const [year, scheduleByDate] of seasonScheduleMaps) {
+      teamResultsMaps.set(year, buildTeamResults(scheduleByDate))
+    }
   }
 
   for (const date of dates) {
@@ -576,6 +820,9 @@ async function run() {
         predictions.push(...(cached.predictions ?? []))
         legacyPredictions.push(...(cached.legacyPredictions ?? []))
         infoPredictions.push(...(cached.infoPredictions ?? []))
+        simFixedPredictions.push(...(cached.simFixedPredictions ?? []))
+        simStreakPredictions.push(...(cached.simStreakPredictions ?? []))
+        simFaithfulPredictions.push(...(cached.simFaithfulPredictions ?? []))
         for (const row of cached.predictions ?? []) {
           if (typeof row.gamePk === 'number') seenGamePks.add(row.gamePk)
         }
@@ -599,6 +846,9 @@ async function run() {
     const datePredictions = []
     const dateLegacyPredictions = []
     const dateInfoPredictions = []
+    const dateSimFixedPredictions = []
+    const dateSimStreakPredictions = []
+    const dateSimFaithfulPredictions = []
 
     if (actualOnlyMode) {
       await mapWithConcurrency(games, 8, async game => {
@@ -814,6 +1064,52 @@ async function run() {
         infoPredictions.push(infoPredictionRow)
         dateInfoPredictions.push(infoPredictionRow)
       }
+
+      if (compareSimMode) {
+        const simHomeBatters = lineup?.linear?.simHome ?? []
+        const simAwayBatters = lineup?.linear?.simAway ?? []
+        const personIds = [...simHomeBatters, ...simAwayBatters].map(b => b.personId)
+          .concat([homePitcherId, awayPitcherId])
+        await fetchHandednessBatch(personIds, handednessCache)
+        for (const batter of [...simHomeBatters, ...simAwayBatters]) {
+          batter.batSide = handednessCache.get(batter.personId)?.batSide ?? null
+        }
+
+        const homePitcherSim = {
+          obpAllowed: homePitcher.obpAllowed ?? null,
+          battersFaced: homePitcher.battersFaced ?? 0,
+          pitchHand: handednessCache.get(homePitcherId)?.pitchHand ?? null,
+        }
+        const awayPitcherSim = {
+          obpAllowed: awayPitcher.obpAllowed ?? null,
+          battersFaced: awayPitcher.battersFaced ?? 0,
+          pitchHand: handednessCache.get(awayPitcherId)?.pitchHand ?? null,
+        }
+
+        const teamResults = teamResultsMaps.get(season)
+        const homeStreakFactor = SIM_STREAK_FACTORS[Math.min(winStreakBefore(teamResults, game.teams.home.team.id, date), 5)]
+        const awayStreakFactor = SIM_STREAK_FACTORS[Math.min(winStreakBefore(teamResults, game.teams.away.team.id, date), 5)]
+
+        const baseInputs = {
+          gamePk: game.gamePk,
+          parkFactor: getParkFactor(game.venue.id),
+          awayBatters: simAwayBatters,
+          homeBatters: simHomeBatters,
+          awayPitcher: awayPitcherSim,
+          homePitcher: homePitcherSim,
+        }
+
+        const rows = [
+          [simFixedPredictions, dateSimFixedPredictions, simGameYrfi(baseInputs)],
+          [simStreakPredictions, dateSimStreakPredictions, simGameYrfi({ ...baseInputs, awayStreakFactor, homeStreakFactor })],
+          [simFaithfulPredictions, dateSimFaithfulPredictions, simGameYrfi({ ...baseInputs, awayStreakFactor, homeStreakFactor, faithful: true })],
+        ]
+        for (const [allRows, dateRows, prediction] of rows) {
+          const row = { gamePk: game.gamePk, date, prediction, actual }
+          allRows.push(row)
+          dateRows.push(row)
+        }
+      }
     })
 
     if (resumeMode) {
@@ -821,6 +1117,9 @@ async function run() {
         predictions: datePredictions,
         legacyPredictions: dateLegacyPredictions,
         infoPredictions: dateInfoPredictions,
+        simFixedPredictions: dateSimFixedPredictions,
+        simStreakPredictions: dateSimStreakPredictions,
+        simFaithfulPredictions: dateSimFaithfulPredictions,
       })
     }
   }
@@ -878,6 +1177,53 @@ async function run() {
     console.log(`Legacy Brier score:           ${legacyBrierScore.toFixed(4)}`)
     console.log(`Brier delta (current-legacy): ${(brierScore - legacyBrierScore).toFixed(4)}`)
     console.log(`Calibration delta:            ${formatPct(calibrationGap - legacyCalibrationGap)}`)
+  }
+
+  if (compareSimMode && simFixedPredictions.length > 0) {
+    const poissonByGame = new Map(predictions.map(row => [row.gamePk, row]))
+    const buildBlend = simRows => simRows
+      .filter(row => poissonByGame.has(row.gamePk))
+      .map(row => ({
+        gamePk: row.gamePk,
+        date: row.date,
+        prediction: (row.prediction + poissonByGame.get(row.gamePk).prediction) / 2,
+        actual: row.actual,
+      }))
+
+    const variants = [
+      ['Poisson (current)', predictions],
+      ['Sim fixed (no streaks)', simFixedPredictions],
+      ['Sim fixed + streaks', simStreakPredictions],
+      ['Sim faithful (as-coded)', simFaithfulPredictions],
+      ['Blend Poisson+SimFixed', buildBlend(simFixedPredictions)],
+      ['Blend Poisson+SimStreaks', buildBlend(simStreakPredictions)],
+    ]
+
+    console.log('')
+    console.log('Model comparison (sim):')
+    console.log('  variant                    | n     | avgPred | actual | calGap  | Brier')
+    let best = null
+    for (const [label, rows] of variants) {
+      if (rows.length === 0) continue
+      const s = summarizePredictions(rows)
+      console.log(`  ${label.padEnd(26)} | ${String(rows.length).padStart(5)} | ${formatPct(s.avgPrediction).padStart(6)} | ${formatPct(s.actualRate).padStart(6)} | ${formatPct(s.calibrationGap).padStart(6)} | ${s.brierScore.toFixed(4)}`)
+      if (!best || s.brierScore < best.brier - 1e-9 ||
+          (Math.abs(s.brierScore - best.brier) <= 1e-9 && Math.abs(s.calibrationGap) < Math.abs(best.calGap))) {
+        best = { label, brier: s.brierScore, calGap: s.calibrationGap, rows }
+      }
+    }
+    console.log('')
+    console.log(`Best variant: ${best.label} (Brier ${best.brier.toFixed(4)}, calibration gap ${formatPct(best.calGap)})`)
+
+    console.log('')
+    console.log(`Calibration bins — ${best.label}:`)
+    for (const bin of bins) {
+      const rows = best.rows.filter(row => row.prediction >= bin.min && row.prediction < bin.max)
+      if (rows.length === 0) continue
+      const predicted = rows.reduce((sum, row) => sum + row.prediction, 0) / rows.length
+      const actual = rows.reduce((sum, row) => sum + row.actual, 0) / rows.length
+      console.log(`  ${formatPct(bin.min)}-${formatPct(bin.max)}: n=${rows.length}, pred=${formatPct(predicted)}, actual=${formatPct(actual)}`)
+    }
   }
 
   if (compareTapersMode && infoPredictions.length > 0) {

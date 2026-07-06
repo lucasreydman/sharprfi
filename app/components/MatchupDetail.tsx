@@ -4,6 +4,8 @@ import type { GameResult, BatterRow, PitcherStats } from '@/lib/types'
 import { computeMatchupBreakdown, type FactorBadge, type HalfInningBreakdown } from '@/lib/model-breakdown'
 import { getTeamDisplayName } from '@/lib/team-names'
 import { useSettings } from '@/app/context/SettingsContext'
+import { MODE_LABELS, viewProbability, type ViewMode } from '@/lib/mode'
+import EvCalculator from './EvCalculator'
 // ─── Factor badge chip ────────────────────────────────────────────────────────
 
 function FactorChip({ badge }: { badge: FactorBadge }) {
@@ -173,6 +175,55 @@ function HalfInningSection({
 
 // ─── Park & weather section ───────────────────────────────────────────────────
 
+// ─── Models section (Poisson vs Monte Carlo sim, both always shown) ──────────
+
+function viewPct(yrfiProbability: number, mode: ViewMode): string {
+  const p = mode === 'yrfi' ? yrfiProbability : 1 - yrfiProbability
+  return `${(p * 100).toFixed(2)}%`
+}
+
+function ModelsSection({ game, mode }: { game: GameResult; mode: ViewMode }) {
+  const label = MODE_LABELS[mode]
+  const isBlend = game.modelUsed === 'blend'
+  const headlineBadge = (
+    <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-[0.65rem] font-semibold text-white">
+      {isBlend ? '½ headline' : 'Headline'}
+    </span>
+  )
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-400">Poisson model</div>
+          {(game.modelUsed === 'poisson' || isBlend) && headlineBadge}
+        </div>
+        <div className="grid grid-cols-3 gap-1 text-center">
+          <Stat label={`${label} %`} value={viewPct(game.poissonYrfiProbability, mode)} />
+          <Stat label="λ home" value={game.lambda.home.toFixed(3)} />
+          <Stat label="λ away" value={game.lambda.away.toFixed(3)} />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-400">Monte Carlo sim</div>
+          {(game.modelUsed === 'sim' || isBlend) && headlineBadge}
+        </div>
+        {game.simYrfiProbability !== null && game.simDetails ? (
+          <div className="grid grid-cols-3 gap-1 text-center">
+            <Stat label={`${label} %`} value={viewPct(game.simYrfiProbability, mode)} />
+            <Stat label="xRuns 1st" value={(game.simDetails.home.expectedRuns + game.simDetails.away.expectedRuns).toFixed(2)} />
+            <Stat label="xHits 1st" value={(game.simDetails.home.expectedHits + game.simDetails.away.expectedHits).toFixed(2)} />
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400">Simulation unavailable for this game.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function EnvSection({ game, envFactors }: { game: GameResult; envFactors: FactorBadge[] }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -199,6 +250,11 @@ export default function MatchupDetail({ game }: { game: GameResult }) {
 
   return (
     <div className="space-y-3 text-sm">
+      {/* Both engines side by side */}
+      <SectionHeader label="Models" />
+      <ModelsSection game={game} mode={settings.mode} />
+      <EvCalculator probability={viewProbability(game, settings.mode)} mode={settings.mode} />
+
       {/* Away team bats (home pitcher vs away lineup) */}
       <SectionHeader label={`${awayTeam} batting`} />
       <HalfInningSection
