@@ -55,6 +55,7 @@ const MODE_COPY: Record<ViewMode, ModeCopy> = {
     accentText: 'text-green-700',
     introBody: (
       <>
+        blended with a batter-level Monte Carlo simulation
         to estimate the likelihood that at least one run
         scores in the first inning of each game. Each half-inning is modeled independently,
         then combined. The output is the minimum American odds at which a YRFI bet has positive expected value.
@@ -103,6 +104,7 @@ const MODE_COPY: Record<ViewMode, ModeCopy> = {
     accentText: 'text-red-700',
     introBody: (
       <>
+        blended with a batter-level Monte Carlo simulation
         to estimate the likelihood that neither team scores
         across the six outs of the first inning. Each half-inning is modeled independently using
         starter quality, offense, park, and weather inputs, then combined. The output is the minimum
@@ -326,6 +328,34 @@ export default function MethodologyView() {
           you need odds <em>at least</em> this good, not just approximately this good.
           A <Mono>~</Mono> prefix means one or both probable starters are still TBD, or a named starter still relies on fallback pitcher inputs.
           Odds stay visible unless a probable starter is still TBD.
+        </p>
+      </Section>
+
+      {/* Hybrid engine */}
+      <Section title="The second engine — batter-level Monte Carlo">
+        <p className="mb-3 leading-relaxed">
+          Since July 2026 the headline number is a 50/50 blend of the Poisson model above and a{' '}
+          batter-level Monte Carlo simulation contributed by <strong>Francisco Renteria Nevarez</strong> and
+          adapted for this site. For each game it simulates the first inning 10,000 times: every batter in the
+          confirmed order gets a reach-base probability from their season{' '}
+          <a
+            href="https://library.fangraphs.com/offense/woba/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-slate-600 underline decoration-slate-300 decoration-1 underline-offset-2 transition-colors hover:text-slate-800 hover:decoration-slate-400"
+          >
+            wOBA
+          </a>{' '}
+          (shrunk toward league average in small samples), adjusted for the platoon matchup against the
+          opposing starter&apos;s handedness, the starter&apos;s OBP-allowed, and the park. Walks advance runners
+          only when forced; hits advance them station-to-station with an MLB-average hit-type split. The share of
+          innings with at least one run is that half-inning&apos;s scoring probability.
+        </p>
+        <p className="text-slate-500 text-xs leading-relaxed">
+          On a 1,344-game 2026 backtest the blend scored a better Brier than either engine alone
+          (0.2447 vs 0.2476 Poisson / 0.2463 sim) with a calibration gap of +1.2%, and spreads its predictions
+          meaningfully wider — games it rates 60–70% have hit 66.7%. Both engines are shown side by side in every
+          matchup&apos;s detail panel.
         </p>
       </Section>
 

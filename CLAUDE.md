@@ -4,7 +4,7 @@
 
 ## What This Project Is
 
-A Next.js MLB betting tool that models first-inning scoring with a Poisson model and serves **both sides of the bet behind a header toggle**: NRFI (no run in the 1st) and YRFI (at least one run). Users see each game's probability for the active view and the minimum American odds needed for a +EV bet. No sportsbook integration — model output only.
+A Next.js MLB betting tool that models first-inning scoring with **two engines** — the original Poisson model and a batter-level Monte Carlo simulation (contributed by Francisco Renteria Nevarez, July 2026) — and serves **both sides of the bet behind a header toggle**: NRFI (no run in the 1st) and YRFI (at least one run). The headline probability is a 50/50 blend (backtest winner; see `lib/model-config.ts` for the numbers). Users see each game's probability for the active view and the minimum American odds needed for a +EV bet. A manual-odds EV calculator lives in the matchup detail panel; no sportsbook integration.
 
 Formerly two mirrored sites (bet-nrfi / bet-yrfi), merged in July 2026. The API computes the canonical YRFI probability; the NRFI view derives `1 − p`, its own break-even odds, sort order, colors, and copy client-side via `lib/mode.ts`. NRFI mode uses a red accent, YRFI green.
 
@@ -33,6 +33,8 @@ This project uses a Next.js version with breaking changes from training data. **
 |---|---|
 | `app/api/games/route.ts` | Main API endpoint — orchestrates all data fetching and model execution |
 | `lib/poisson.ts` | λ calculation, P(YRFI) + P(NRFI), break-even odds |
+| `lib/sim.ts` | Monte Carlo engine: wOBA + shrinkage + platoon + pitcher OBP-allowed, seeded PRNG (seed = gamePk), EV formulas |
+| `lib/model-config.ts` | HEADLINE_MODEL ('blend') + SIM_USE_STREAKS (false) — set by `npm run backtest -- <range> --compare-sim` |
 | `lib/mode.ts` | NRFI/YRFI view helpers: viewProbability, viewOdds, sortForMode, MODE_ACCENT classes |
 | `lib/yrfi-color.ts`, `lib/nrfi-color.ts` | Probability text-color gradients, one normalization range per view |
 | `lib/mlb-api.ts` | MLB Stats API calls (schedule, pitcher stats, team OBP, boxscore) |
@@ -69,7 +71,11 @@ Update these at the start of each season.
 
 P(YRFI) = 1 − e^(−λ_home) × e^(−λ_away)
 P(NRFI) = 1 − P(YRFI)
+
+headline = (P_poisson + P_sim) / 2      // lib/model-config.ts HEADLINE_MODEL='blend'
 ```
+
+The sim engine (lib/sim.ts) is deterministic per game (mulberry32 seeded with gamePk) and calibrated so league-average inputs give 49.05% YRFI (`SIM_REACH_CALIBRATION = 1.2333`). Streak factors exist but are OFF — they hurt the backtest. Bump `RESPONSE_CACHE_VERSION` when GameResult shape changes (currently v4).
 
 Wind factor requires `outfieldFacingDegrees` from the stadium constants in `weather-api.ts`. Wind direction from Open-Meteo is the direction the wind comes **from**.
 

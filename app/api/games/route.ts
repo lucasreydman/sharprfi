@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { kvGet, kvSet } from '@/lib/kv'
 import { fetchSchedule } from '@/lib/mlb-api'
-import { fetchGameLineupStats, fetchPitcherModelStats, fetchTeamOffenseStats, fetchLinescore } from '@/lib/mlb-api'
+import { fetchGameLineupStats, fetchPitcherModelStats, fetchTeamOffenseStats, fetchLinescore, fetchHandedness, fetchTeamWinStreaks, type SimLineupBatter } from '@/lib/mlb-api'
+import { simulateGame, streakFactorForWinStreak, type SimBatter, type SimPitcher } from '@/lib/sim'
+import { HEADLINE_MODEL, SIM_USE_STREAKS } from '@/lib/model-config'
 import { loadSavantStore, getSavantStats } from '@/lib/savant-api'
 import { fetchWeather, getOutfieldFacingDegrees } from '@/lib/weather-api'
 import { getParkFactor } from '@/lib/park-factors'
@@ -19,7 +21,7 @@ import {
 import type { GameResult, GamesResponse, PitcherStats } from '@/lib/types'
 
 const RESPONSE_TTL_SECONDS = 300 // 5 minutes
-const RESPONSE_CACHE_VERSION = 'v3'
+const RESPONSE_CACHE_VERSION = 'v4'
 
 function getPacificDate(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date())
@@ -88,6 +90,19 @@ export async function GET(req: NextRequest) {
     const pitcherStatsMap = new Map(pitcherStats.map(p => [p.id, p.stats]))
     const teamOBPMap = new Map(teamOBPs.map(t => [t.id, t.stats]))
     const lineupStatsMap = new Map(lineupStats.map(entry => [entry.gamePk, entry.stats]))
+
+    // Sim engine inputs: one batched handedness lookup for every batter and
+    // pitcher on the slate, plus (optionally) team win streaks
+    const slatePersonIds = [
+      ...pitcherIds,
+      ...lineupStats.flatMap(entry =>
+        [...entry.stats.home.simBatters, ...entry.stats.away.simBatters].map(b => b.personId)
+      ),
+    ]
+    const [handednessMap, winStreaks] = await Promise.all([
+      fetchHandedness(slatePersonIds),
+      SIM_USE_STREAKS ? fetchTeamWinStreaks(season) : Promise.resolve({} as Record<number, number>),
+    ])
 
     // Build results
     const results: GameResult[] = await Promise.all(
@@ -180,7 +195,45 @@ export async function GET(req: NextRequest) {
           ...sharedEnv,
         })
 
-        const yrfiProbability = computeYrfiProbability(lambdaHome, lambdaAway)
+        const poissonYrfiProbability = computeYrfiProbability(lambdaHome, lambdaAway)
+
+        // Monte Carlo sim engine (Francisco's model, fixed) — same matchup
+        function toSimBatters(batters: SimLineupBatter[]): SimBatter[] {
+          return batters.map(b => ({
+            singles: b.singles,
+            doubles: b.doubles,
+            triples: b.triples,
+            homeRuns: b.homeRuns,
+            walks: b.walks,
+            hitByPitch: b.hitByPitch,
+            plateAppearances: b.plateAppearances,
+            batSide: handednessMap[b.personId]?.batSide ?? null,
+          }))
+        }
+        function toSimPitcher(pitcher: { id: number } | undefined): SimPitcher {
+          const stats = pitcher ? pitcherStatsMap.get(pitcher.id) : undefined
+          return {
+            obpAllowed: stats?.obpAllowed ?? null,
+            battersFaced: stats?.battersFaced ?? 0,
+            pitchHand: pitcher ? handednessMap[pitcher.id]?.pitchHand ?? null : null,
+          }
+        }
+
+        const sim = simulateGame({
+          gamePk: game.gamePk,
+          parkFactor,
+          homeBatters: toSimBatters(lineupStats?.home.simBatters ?? []),
+          awayBatters: toSimBatters(lineupStats?.away.simBatters ?? []),
+          homePitcher: toSimPitcher(game.teams.home.probablePitcher),
+          awayPitcher: toSimPitcher(game.teams.away.probablePitcher),
+          homeStreakFactor: SIM_USE_STREAKS ? streakFactorForWinStreak(winStreaks[game.teams.home.team.id] ?? 0) : 1.0,
+          awayStreakFactor: SIM_USE_STREAKS ? streakFactorForWinStreak(winStreaks[game.teams.away.team.id] ?? 0) : 1.0,
+        })
+
+        const yrfiProbability =
+          HEADLINE_MODEL === 'sim' ? sim.simYrfiProbability :
+          HEADLINE_MODEL === 'blend' ? (poissonYrfiProbability + sim.simYrfiProbability) / 2 :
+          poissonYrfiProbability
         const odds = breakEvenOdds(yrfiProbability)
 
         let firstInningResult: GameResult['firstInningResult'] = 'pending'
@@ -207,6 +260,10 @@ export async function GET(req: NextRequest) {
           parkFactor,
           lambda: { home: lambdaHome, away: lambdaAway },
           yrfiProbability,
+          poissonYrfiProbability,
+          simYrfiProbability: sim.simYrfiProbability,
+          modelUsed: HEADLINE_MODEL,
+          simDetails: { home: sim.home, away: sim.away },
           breakEvenOdds: odds,
           lineupConfirmed,
           lineupDetails: {
