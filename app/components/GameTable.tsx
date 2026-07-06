@@ -6,7 +6,7 @@ import GameRow from './GameRow'
 import MatchupDetail from './MatchupDetail'
 import { useSettings, resolveTimezone } from '@/app/context/SettingsContext'
 import { getTeamDisplayName } from '@/lib/team-names'
-import { getYrfiTextClass } from '@/lib/yrfi-color'
+import { viewProbability, viewOdds, getViewTextClass, sortForMode, MODE_LABELS, type ViewMode } from '@/lib/mode'
 
 interface GameTableProps {
   games: GameResult[]
@@ -27,12 +27,15 @@ function formatOddsDisplay(
   return `${display} or better`
 }
 
-function MobileResultBadge({ game }: { game: GameResult }) {
+function MobileResultBadge({ game, mode }: { game: GameResult; mode: ViewMode }) {
+  // A run scored is a YRFI win / NRFI loss, and vice versa.
+  const winBadge = 'rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700'
+  const lossBadge = 'rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-600'
   if (game.firstInningResult === 'run') {
-    return <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">RUN</span>
+    return <span className={mode === 'yrfi' ? winBadge : lossBadge}>RUN</span>
   }
   if (game.firstInningResult === 'no_run') {
-    return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-600">NO RUN</span>
+    return <span className={mode === 'yrfi' ? lossBadge : winBadge}>NO RUN</span>
   }
   if (game.gameStatus === 'inProgress') {
     return <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-700">IP</span>
@@ -64,14 +67,15 @@ function MobileCard({ game }: { game: GameResult }) {
   const showEstimatePrefix = showOddsUnavailable || game.homePitcher.estimated || game.awayPitcher.estimated
   const awayTeam = getTeamDisplayName(game.awayTeam)
   const homeTeam = getTeamDisplayName(game.homeTeam)
-  const pct = `${showEstimatePrefix ? '~' : ''}${(game.yrfiProbability * 100).toFixed(2)}%`
-  const odds = showOddsUnavailable ? '—' : formatOddsDisplay(game.breakEvenOdds, settings.oddsFormat)
+  const probability = viewProbability(game, settings.mode)
+  const pct = `${showEstimatePrefix ? '~' : ''}${(probability * 100).toFixed(2)}%`
+  const odds = showOddsUnavailable ? '—' : formatOddsDisplay(viewOdds(game, settings.mode), settings.oddsFormat)
   const time = new Date(game.gameTime).toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
     timeZone: resolveTimezone(settings.timezone),
   })
-  const yrfiColorClass = getYrfiTextClass(game.yrfiProbability)
+  const probabilityColorClass = getViewTextClass(probability, settings.mode)
 
   const tempStr = game.weather.controlled ? 'Roof' : game.weather.failure ? '—' : settings.tempUnit === 'C'
     ? `${Math.round((game.weather.tempF - 32) * 5 / 9)}°C`
@@ -99,8 +103,8 @@ function MobileCard({ game }: { game: GameResult }) {
             </div>
           </div>
           <div className="shrink-0 text-right">
-            <div className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-slate-400">YRFI</div>
-            <div className={`mt-1 text-2xl font-bold tabular-nums ${yrfiColorClass}`}>{pct}</div>
+            <div className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-slate-400">{MODE_LABELS[settings.mode]}</div>
+            <div className={`mt-1 text-2xl font-bold tabular-nums ${probabilityColorClass}`}>{pct}</div>
           </div>
         </div>
 
@@ -111,7 +115,7 @@ function MobileCard({ game }: { game: GameResult }) {
 
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
           <Metric label="Bet at" value={odds} valueClassName={showOddsUnavailable ? 'text-slate-300' : 'text-slate-700'} />
-          <Metric label="Result" value={<MobileResultBadge game={game} />} />
+          <Metric label="Result" value={<MobileResultBadge game={game} mode={settings.mode} />} />
           <Metric label="First pitch" value={time} />
           <Metric label="Weather" value={weatherSummary} />
         </div>
@@ -135,7 +139,11 @@ function MobileCard({ game }: { game: GameResult }) {
 }
 
 export default function GameTable({ games, label }: GameTableProps) {
+  const { settings } = useSettings()
   if (games.length === 0) return null
+
+  // Server order is YRFI-descending; re-sort so the active view's best bets lead.
+  const sorted = sortForMode(games, settings.mode)
 
   return (
     <section className="mb-6 sm:mb-8">
@@ -143,7 +151,7 @@ export default function GameTable({ games, label }: GameTableProps) {
 
       {/* Mobile card list */}
       <div className="space-y-3 sm:hidden">
-        {games.map(g => <MobileCard key={g.gamePk} game={g} />)}
+        {sorted.map(g => <MobileCard key={g.gamePk} game={g} />)}
       </div>
 
       {/* Desktop table */}
@@ -165,7 +173,7 @@ export default function GameTable({ games, label }: GameTableProps) {
               <th className="px-4 py-3 whitespace-nowrap">Matchup</th>
               <th className="px-4 py-3 whitespace-nowrap">Away SP</th>
               <th className="px-4 py-3 whitespace-nowrap">Home SP</th>
-              <th className="px-4 py-3 whitespace-nowrap">YRFI %</th>
+              <th className="px-4 py-3 whitespace-nowrap">{MODE_LABELS[settings.mode]} %</th>
               <th className="px-4 py-3 whitespace-nowrap text-center">Bet at</th>
               <th className="px-3 py-3 whitespace-nowrap text-center">Temp</th>
               <th className="px-3 py-3 whitespace-nowrap text-center">Wind</th>
@@ -174,7 +182,7 @@ export default function GameTable({ games, label }: GameTableProps) {
             </tr>
           </thead>
           <tbody>
-            {games.map(g => <GameRow key={g.gamePk} game={g} />)}
+            {sorted.map(g => <GameRow key={g.gamePk} game={g} />)}
           </tbody>
         </table>
       </div>

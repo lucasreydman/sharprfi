@@ -1,12 +1,15 @@
-# BET-YRFI — MLB YRFI Betting Model
+# SHARPRFI — MLB First-Inning Run Model (NRFI + YRFI)
 
-A standalone MLB betting tool that calculates the probability of a run being scored in the first inning (**YRFI** — Yes Run First Inning) for every game on the selected slate.
+A standalone MLB betting tool that models first-inning scoring for every game on the selected slate. A header toggle switches between the two sides of the same bet:
+
+- **NRFI** (No Run First Inning) — probability neither team scores in the 1st
+- **YRFI** (Yes Run First Inning) — probability at least one run scores in the 1st
+
+The two views share one Poisson model: `P(YRFI) = 1 − P(NRFI)`. The API returns the canonical YRFI probability; the NRFI view derives its complement client-side (`lib/mode.ts`).
 
 For each game it shows:
-- The model's **YRFI probability** (%) to two decimal places
-- The **minimum American odds** needed at your sportsbook for a +EV bet
-
-**See also:** [BET-NRFI](https://bet-nrfi.vercel.app) — the companion tool for the other side of the same bet.
+- The model's probability (%) for the active view, to two decimal places
+- The **minimum American odds** needed at your sportsbook for a +EV bet on that side
 
 No sportsbook integration — you compare the threshold against your own book and decide.
 
@@ -14,8 +17,9 @@ No sportsbook integration — you compare the threshold against your own book an
 
 ## App and URL
 
-- **App name:** `bet-yrfi`
-- **Production URL:** `https://bet-yrfi.vercel.app`
+- **App name:** `sharprfi`
+- **Production URL:** `https://sharprfi.vercel.app`
+- **History:** merger of the former `bet-nrfi.vercel.app` and `bet-yrfi.vercel.app` sites (mirrored codebases; combined July 2026)
 
 ---
 
@@ -123,18 +127,19 @@ npx vercel --prod # Deploy to production
 - **Responsive layout:** Mobile uses stacked game cards, condensed controls, and a card-based methodology view; desktop keeps the fixed-width ranked table layout
 - **Matchup detail:** Tap or click any game row/card to expand an inline breakdown showing each pitcher's FIP/K%/Barrel%/λ, the confirmed top-5 lineup with stabilized OBP, and park/weather factor chips with direction and multiplier
 - **Matchup labels:** Team nicknames only in table and mobile card views (for example, Yankees, Twins, Red Sox)
-- **YRFI % colors:** green–yellow–red gradient anchored to the model's realistic range (44–60%); green = well above league average, yellow = near average (~49%), red = well below average. Same gradient direction as BET-NRFI — greener always means a stronger bet signal.
-- **YRFI % display:** Percentages render to two decimal places
-- **Result column:** Upcoming shows `—`, in-progress first innings show `IP`, scoring first innings show `RUN`, and scoreless first innings show `NO RUN`
+- **NRFI/YRFI toggle:** Segmented control in the header switches every view (probabilities, odds, sort order, result badge colors, accent theme, methodology copy). Choice persists in localStorage; first-time visitors land on YRFI. NRFI mode uses a red accent, YRFI green — preserving each original site's identity.
+- **Probability colors:** green–yellow–red gradient anchored to each view's realistic model range (YRFI 44–60%, NRFI 45–62%); greener always means a stronger bet signal for the active side.
+- **Probability display:** Percentages render to two decimal places
+- **Result column:** Upcoming shows `—`, in-progress first innings show `IP`, scoring first innings show `RUN`, and scoreless first innings show `NO RUN`. The badge is green when the active view's bet wins (RUN in YRFI mode, NO RUN in NRFI mode) and red when it loses.
 - **Desktop table alignment:** Temp, Wind, Time, and Result use centered fixed-width columns for uniform spacing
 - **Mobile controls:** Today, Tomorrow, Preferences, and Methodology use the same compact pill treatment; the methodology tab keeps Back to games and Methodology aligned on one row with matched sizing
-- **Estimate marker:** `~` prefixes YRFI when one or both probable starters are still TBD or when a named starter still relies on fallback pitcher inputs
+- **Estimate marker:** `~` prefixes the probability when one or both probable starters are still TBD or when a named starter still relies on fallback pitcher inputs
 - **Odds availability:** Break-even odds are hidden only when a probable starter is still TBD
 - **Lineup-aware adjustment:** If a confirmed batting order is posted, the model computes a probability-weighted average OBP for the first five hitters and compares it against the team baseline. Batters 1–3 are weighted 1.00 (guaranteed to bat); batter 4 is weighted 0.672 and batter 5 is weighted 0.366, derived from `P(X ≤ 2 | Binomial(n, 0.69))` — the probability each batter reaches the plate given the league out rate of 0.69 per PA. Individual batter names, stabilized OBP, and PA are exposed in the API response and shown in the matchup detail panel
 - **Roofed/retractable parks:** Weather is neutralized and the UI shows `Roof`
 - **Weather failure:** Factors default to 1.0; weather column shows `—`
-- **Preferences:** Temperature unit, wind unit, odds format, timezone — persisted in localStorage
-- **Footer:** Left side links to lucasreydman.xyz; right side links to BET-NRFI (highlighted in red, matching that site's accent color)
+- **Preferences:** Temperature unit, wind unit, odds format, timezone — persisted in localStorage alongside the NRFI/YRFI mode
+- **Footer:** Links to lucasreydman.xyz, accented in the active view's color
 - **Methodology math:** Formula blocks use smaller mobile typography so they stay visible without horizontal scrolling
 
 ---

@@ -8,7 +8,9 @@ import DatePicker from './DatePicker'
 import LoadingSkeleton from './LoadingSkeleton'
 import MethodologyView from './MethodologyView'
 import ConfigPanel from './ConfigPanel'
-import { SettingsProvider } from '@/app/context/SettingsContext'
+import { SettingsProvider, useSettings } from '@/app/context/SettingsContext'
+import { MODE_ACCENT, MODE_LABELS, type ViewMode } from '@/lib/mode'
+import { SITE_NAME } from '@/lib/site'
 
 const mobilePillClass = 'min-h-10 rounded-full px-4 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:px-4 sm:py-1.5'
 
@@ -18,7 +20,42 @@ function getPacificToday(): string {
 
 type Tab = 'games' | 'methodology'
 
+const MODE_TAGLINES: Record<ViewMode, string> = {
+  yrfi: 'Books shade extra vig into public NRFI prices, so why not hunt for EV on the other side?',
+  nrfi: 'Six outs. No runs. Find the matchups where elite starters will retire the side with ease.',
+}
+
+function ModeToggle() {
+  const { settings, update } = useSettings()
+  return (
+    <div className="flex w-fit shrink-0 rounded-full bg-slate-100 p-1" role="group" aria-label="Bet type">
+      {(['nrfi', 'yrfi'] as const).map(m => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => update({ mode: m })}
+          aria-pressed={settings.mode === m}
+          className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+            settings.mode === m ? MODE_ACCENT[m].solid : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          {MODE_LABELS[m]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function ClientShell() {
+  return (
+    <SettingsProvider>
+      <Shell />
+    </SettingsProvider>
+  )
+}
+
+function Shell() {
+  const { settings } = useSettings()
   const [tab, setTab] = useState<Tab>('games')
   const [date, setDate] = useState(getPacificToday)
   const [data, setData] = useState<GamesResponse | null>(null)
@@ -73,10 +110,25 @@ export default function ClientShell() {
   const inProgress = data?.games.filter(g => g.gameStatus === 'inProgress' && g.firstInningResult === 'pending') ?? []
   const settled = data?.games.filter(g => g.gameStatus === 'settled' || (g.gameStatus === 'inProgress' && g.firstInningResult !== 'pending')) ?? []
   const isMethodologyTab = tab === 'methodology'
-  const methodologyButtonClass = `flex items-center justify-center gap-2 ${mobilePillClass} ${isMethodologyTab ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`
+  const accent = MODE_ACCENT[settings.mode]
+  const methodologyButtonClass = `flex items-center justify-center gap-2 ${mobilePillClass} ${isMethodologyTab ? accent.solidHover : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`
 
   return (
-    <SettingsProvider>
+    <>
+    <header className="border-b border-slate-200 bg-white py-3 sm:py-4">
+      <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 md:flex-row md:items-center md:justify-between md:gap-4">
+        <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:gap-3">
+          <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
+            <h1 className="text-[1.75rem] font-bold leading-none tracking-tight text-slate-900 sm:text-[2rem]">{SITE_NAME}</h1>
+            <span className="text-xs font-semibold tracking-tight text-slate-400 sm:text-sm">.vercel.app</span>
+          </div>
+          <span className="max-w-xl text-xs leading-snug text-slate-400 sm:text-sm">
+            {MODE_TAGLINES[settings.mode]}
+          </span>
+        </div>
+        <ModeToggle />
+      </div>
+    </header>
     <div className="mx-auto max-w-7xl">
       {/* Nav bar: date tabs + right-side actions */}
       <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:h-14 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:py-0">
@@ -193,25 +245,14 @@ export default function ClientShell() {
               href="https://lucasreydman.xyz"
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-green-700 underline decoration-green-200 underline-offset-2 transition-colors hover:text-green-800"
+              className={`font-medium ${accent.link}`}
             >
               Lucas Reydman
-            </a>
-          </span>
-          <span>
-            Enjoy this?{' '}
-            <a
-              href="https://bet-nrfi.vercel.app"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-red-700 underline decoration-red-200 underline-offset-2 transition-colors hover:text-red-800"
-            >
-              Check out BET-NRFI →
             </a>
           </span>
         </div>
       </footer>
     </div>
-    </SettingsProvider>
+    </>
   )
 }

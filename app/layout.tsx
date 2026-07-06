@@ -5,21 +5,21 @@ import { SITE_NAME, getSiteUrl } from '@/lib/site'
 
 const geist = Geist({ subsets: ['latin'] })
 const metadataTitle = SITE_NAME
-const metadataDescription = 'Find the minimum odds you need to bet YRFI with a statistical edge. Model-driven, updated daily.'
-const ogImageUrl = `${getSiteUrl()}/bet-yrfi-opengraph.png`
+const metadataDescription = 'One model, both sides of the first inning. Find the minimum odds you need to bet NRFI or YRFI with a statistical edge. Updated daily.'
+const ogImageUrl = `${getSiteUrl()}/sharprfi-opengraph.png`
 
 export const metadata: Metadata = {
-  applicationName: 'bet-yrfi',
+  applicationName: 'sharprfi',
   title: {
     absolute: metadataTitle,
   },
   description: metadataDescription,
   icons: {
     icon: [
-      { url: '/yrfi-ballmark.svg', type: 'image/svg+xml' },
+      { url: '/sharprfi-ballmark.svg', type: 'image/svg+xml' },
     ],
-    shortcut: '/yrfi-ballmark.svg',
-    apple: '/yrfi-ballmark.svg',
+    shortcut: '/sharprfi-ballmark.svg',
+    apple: '/sharprfi-ballmark.svg',
   },
   openGraph: {
     title: metadataTitle,
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     images: [
       {
         url: ogImageUrl,
-        alt: 'BET-YRFI open graph image',
+        alt: 'SHARPRFI open graph image',
       },
     ],
   },

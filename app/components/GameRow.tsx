@@ -4,7 +4,7 @@ import { useState } from 'react'
 import type { GameResult } from '@/lib/types'
 import { useSettings, resolveTimezone } from '@/app/context/SettingsContext'
 import { getTeamDisplayName } from '@/lib/team-names'
-import { getYrfiTextClass } from '@/lib/yrfi-color'
+import { viewProbability, viewOdds, getViewTextClass, type ViewMode } from '@/lib/mode'
 import MatchupDetail from './MatchupDetail'
 
 interface GameRowProps {
@@ -54,12 +54,15 @@ function formatWind(weather: GameResult['weather'], windUnit: 'mph' | 'kmh'): st
     : `${weather.windSpeedMph} mph`
 }
 
-function ResultBadge({ game }: { game: GameResult }) {
+function ResultBadge({ game, mode }: { game: GameResult; mode: ViewMode }) {
+  // A run scored is a YRFI win / NRFI loss, and vice versa.
+  const winBadge = 'inline-flex items-center justify-center whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700'
+  const lossBadge = 'inline-flex items-center justify-center whitespace-nowrap rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-600'
   if (game.firstInningResult === 'run') {
-    return <span className="inline-flex items-center justify-center whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">RUN</span>
+    return <span className={mode === 'yrfi' ? winBadge : lossBadge}>RUN</span>
   }
   if (game.firstInningResult === 'no_run') {
-    return <span className="inline-flex items-center justify-center whitespace-nowrap rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-600">NO RUN</span>
+    return <span className={mode === 'yrfi' ? lossBadge : winBadge}>NO RUN</span>
   }
   if (game.gameStatus === 'inProgress') {
     return <span className="inline-flex items-center justify-center whitespace-nowrap rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-700">IP</span>
@@ -78,12 +81,13 @@ export default function GameRow({ game }: GameRowProps) {
   const showEstimatePrefix = showOddsUnavailable || game.homePitcher.estimated || game.awayPitcher.estimated
   const awayTeam = getTeamDisplayName(game.awayTeam)
   const homeTeam = getTeamDisplayName(game.homeTeam)
-  const pct = formatPct(game.yrfiProbability, showEstimatePrefix)
-  const odds = showOddsUnavailable ? '—' : formatOddsDisplay(game.breakEvenOdds, settings.oddsFormat)
+  const probability = viewProbability(game, settings.mode)
+  const pct = formatPct(probability, showEstimatePrefix)
+  const odds = showOddsUnavailable ? '—' : formatOddsDisplay(viewOdds(game, settings.mode), settings.oddsFormat)
   const temp = formatTemp(game.weather, settings.tempUnit)
   const wind = formatWind(game.weather, settings.windUnit)
   const time = formatTime(game.gameTime, resolveTimezone(settings.timezone))
-  const yrfiColorClass = getYrfiTextClass(game.yrfiProbability)
+  const probabilityColorClass = getViewTextClass(probability, settings.mode)
 
   return (
     <>
@@ -107,8 +111,8 @@ export default function GameRow({ game }: GameRowProps) {
         <td className="px-4 py-3 align-middle text-sm text-slate-600">
           <PitcherName pitcher={game.homePitcher} />
         </td>
-        {/* YRFI % */}
-        <td className={`px-4 py-3 align-middle whitespace-nowrap tabular-nums font-semibold ${yrfiColorClass}`}>
+        {/* NRFI/YRFI % */}
+        <td className={`px-4 py-3 align-middle whitespace-nowrap tabular-nums font-semibold ${probabilityColorClass}`}>
           {pct}
         </td>
         {/* Bet at */}
@@ -123,7 +127,7 @@ export default function GameRow({ game }: GameRowProps) {
         <td className="px-3 py-3 align-middle whitespace-nowrap text-center text-sm text-slate-500">{time}</td>
         {/* Result */}
         <td className="px-2.5 py-3 align-middle whitespace-nowrap text-center">
-          <ResultBadge game={game} />
+          <ResultBadge game={game} mode={settings.mode} />
         </td>
       </tr>
 

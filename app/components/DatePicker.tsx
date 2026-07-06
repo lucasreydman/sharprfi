@@ -1,5 +1,8 @@
 'use client'
 
+import { useSettings } from '@/app/context/SettingsContext'
+import { MODE_ACCENT } from '@/lib/mode'
+
 interface DatePickerProps {
   date: string        // YYYY-MM-DD
   onChange: (date: string) => void
@@ -10,6 +13,7 @@ function getPacificToday(): string {
 }
 
 export default function DatePicker({ date, onChange }: DatePickerProps) {
+  const { settings } = useSettings()
   const today = getPacificToday()
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
@@ -24,7 +28,7 @@ export default function DatePicker({ date, onChange }: DatePickerProps) {
           onClick={() => onChange(d)}
           className={`${buttonClass} ${
             date === d
-              ? 'bg-green-600 text-white'
+              ? MODE_ACCENT[settings.mode].solid
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
           }`}
         >

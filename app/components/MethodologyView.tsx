@@ -1,6 +1,8 @@
 'use client'
 
 import { BlockMath, InlineMath } from 'react-katex'
+import { useSettings } from '@/app/context/SettingsContext'
+import type { ViewMode } from '@/lib/mode'
 
 const lambdaMath = String.raw`\begin{aligned}
 \lambda &= 0.3371 \times A_{\text{bounded}} \\
@@ -15,6 +17,12 @@ P(\mathrm{YRFI}) &= 1 - P(H=0)\,P(A=0) \\
 &= 1 - e^{-(\lambda_H + \lambda_A)}
 \end{aligned}`
 
+const nrfiMath = String.raw`\begin{aligned}
+P(\mathrm{NRFI}) &= P(H=0)\,P(A=0) \\
+&= e^{-\lambda_H} \cdot e^{-\lambda_A} \\
+&= e^{-(\lambda_H + \lambda_A)}
+\end{aligned}`
+
 const oddsMath = String.raw`\begin{cases}
 -\left\lceil \frac{100p}{1-p} \right\rceil & p \ge 0.5 \\
 +\left\lceil \frac{100(1-p)}{p} \right\rceil & p < 0.5
@@ -25,6 +33,123 @@ s_{\text{effective}} &= s_{0}\,m(d) \\
 m(d) &= 1.75 - 0.75\,p(d) \\
 p(d) &= \operatorname{clamp}\!\left(\dfrac{d-\text{Mar 15}}{\text{Jul 1}-\text{Mar 15}},\ 0,\ 1\right)
 \end{aligned}`
+
+interface ModeCopy {
+  accentText: string
+  introBody: React.ReactNode
+  whyTitle: string
+  whyIntro: string
+  whyCards: ReadonlyArray<{ title: string; body: string }>
+  whyFootnote: string
+  baselineSplit: React.ReactNode
+  indicatorLabel: string
+  step2Title: string
+  step2Trigger: React.ReactNode
+  probMath: string
+  step2Note: React.ReactNode
+  step3Lead: string
+}
+
+const MODE_COPY: Record<ViewMode, ModeCopy> = {
+  yrfi: {
+    accentText: 'text-green-700',
+    introBody: (
+      <>
+        to estimate the likelihood that at least one run
+        scores in the first inning of each game. Each half-inning is modeled independently,
+        then combined. The output is the minimum American odds at which a YRFI bet has positive expected value.
+      </>
+    ),
+    whyTitle: 'Why YRFI?',
+    whyIntro: 'The starting point for this project is simple: books often shade extra vig into NRFI because it is the cleaner, more popular public bet. A scoreless first inning feels intuitive, casual bettors gravitate to it, and that demand can make the opposite side more interesting than it looks at first glance.',
+    whyCards: [
+      {
+        title: 'Public bias',
+        body: 'NRFI is a heavily favored public betting angle because rooting for no runs feels safer than betting on instant offense. That popularity gives sportsbooks room to price NRFI aggressively.',
+      },
+      {
+        title: 'Pricing effect',
+        body: 'When books lean into that demand, YRFI can become the less fashionable side with the more interesting price. The edge is not that YRFI wins more often, it is that the offered odds can be better than the true probability implies.',
+      },
+      {
+        title: 'Model goal',
+        body: 'This model exists to estimate fair YRFI probability first, then convert that into a break-even American price. If the market offers a better number than that threshold, the bet is theoretically +EV.',
+      },
+    ],
+    whyFootnote: 'That does not mean every YRFI is good or that every NRFI is bad. It means the question is about price, not just outcome. The methodology below is built to answer that pricing question in a consistent way.',
+    baselineSplit: (
+      <>
+        from 2023 through 2025: <InlineMath math="3575 / 7290 \approx 49.05\%" /> YRFI and <InlineMath math="50.95\%" /> NRFI.
+      </>
+    ),
+    indicatorLabel: 'YRFI',
+    step2Title: 'Step 2 — Compute P(YRFI) from both λ values',
+    step2Trigger: (
+      <>
+        YRFI hits when <em>either</em> team scores, so:
+      </>
+    ),
+    probMath: yrfiMath,
+    step2Note: (
+      <>
+        This assumes independence between the two half-innings, which is a reasonable approximation
+        since different batters face different pitchers. At league-average inputs both half-innings have
+        <InlineMath math={String.raw`\lambda = 0.3371`} />, which gives <InlineMath math={String.raw`P(\mathrm{YRFI}) = 1 - e^{-0.6742} \approx 49.05\%`} />.
+      </>
+    ),
+    step3Lead: 'The "Bet at" column shows the worst odds at which a YRFI bet still has positive expected value. If the sportsbook offers better odds than this, the bet is +EV.',
+  },
+  nrfi: {
+    accentText: 'text-red-700',
+    introBody: (
+      <>
+        to estimate the likelihood that neither team scores
+        across the six outs of the first inning. Each half-inning is modeled independently using
+        starter quality, offense, park, and weather inputs, then combined. The output is the minimum
+        American odds at which an NRFI bet has positive expected value.
+      </>
+    ),
+    whyTitle: 'Why NRFI?',
+    whyIntro: 'NRFI wins when both starters retire the side without giving up a run — six total outs, no damage done. That outcome is genuinely more likely in some games than others, and starter quality is the single biggest driver. The model exists to quantify exactly how much more (or less) likely it is for each matchup.',
+    whyCards: [
+      {
+        title: 'Starter quality',
+        body: 'The first inning belongs almost entirely to the starting pitcher. Elite starters with low FIP, high strikeout rates, and strong Statcast contact metrics genuinely suppress first-inning scoring — that signal is real and measurable.',
+      },
+      {
+        title: 'Context matters',
+        body: 'Park, weather, and lineup order all shift the baseline. A pitcher-friendly park with wind blowing in on a cold night looks very different from Coors Field on a warm afternoon — the model accounts for all of it.',
+      },
+      {
+        title: 'Model goal',
+        body: 'This model estimates a fair NRFI probability for each game, then converts that into a break-even American price. If the sportsbook is offering better odds than the break-even, the bet is theoretically +EV.',
+      },
+    ],
+    whyFootnote: 'NRFI at league average hits roughly 50.95% of the time — it is a slight favorite by default. The cases worth betting are the ones where two quality starters push that number meaningfully higher and the market price reflects less than it should.',
+    baselineSplit: (
+      <>
+        from 2023 through 2025: <InlineMath math="3715 / 7290 \approx 50.95\%" /> NRFI and <InlineMath math="49.05\%" /> YRFI.
+      </>
+    ),
+    indicatorLabel: 'NRFI',
+    step2Title: 'Step 2 — Compute P(NRFI) from both λ values',
+    step2Trigger: (
+      <>
+        NRFI hits when <em>neither</em> team scores, so both half-innings must be scoreless:
+      </>
+    ),
+    probMath: nrfiMath,
+    step2Note: (
+      <>
+        This assumes independence between the two half-innings, which is a reasonable approximation
+        since different batters face different pitchers. At league-average inputs both half-innings have
+        <InlineMath math={String.raw`\lambda = 0.3371`} />, which gives <InlineMath math={String.raw`P(\mathrm{NRFI}) = e^{-0.6742} \approx 50.95\%`} />.
+        This is verified against the 2023–2025 backtested rate of <InlineMath math={String.raw`3715 / 7290 \approx 50.95\%`} /> NRFI.
+      </>
+    ),
+    step3Lead: 'The "Bet at" column shows the worst odds at which an NRFI bet still has positive expected value. If the sportsbook offers better odds than this, the bet is +EV.',
+  },
+}
 
 const factorRows = [
   {
@@ -100,6 +225,9 @@ const caveats = [
 ] as const
 
 export default function MethodologyView() {
+  const { settings } = useSettings()
+  const copy = MODE_COPY[settings.mode]
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 text-sm text-slate-700 sm:py-8">
 
@@ -107,7 +235,7 @@ export default function MethodologyView() {
       <div className="mb-8">
         <h2 className="text-xl font-bold text-slate-900 mb-2">How the model works</h2>
         <p className="text-slate-500 leading-relaxed">
-          YRFI uses a{' '}
+          {copy.indicatorLabel} uses a{' '}
           <a
             href="https://www.geeksforgeeks.org/maths/poisson-distribution/"
             target="_blank"
@@ -116,44 +244,26 @@ export default function MethodologyView() {
           >
             Poisson probability model
           </a>{' '}
-          to estimate the likelihood that at least one run
-          scores in the first inning of each game. Each half-inning is modeled independently,
-          then combined. The output is the minimum American odds at which a YRFI bet has positive expected value.
+          {copy.introBody}
         </p>
       </div>
 
-      <Section title="Why YRFI?">
+      <Section title={copy.whyTitle}>
         <p className="leading-relaxed text-slate-600">
-          The starting point for this project is simple: books often shade extra vig into NRFI because it is the cleaner,
-          more popular public bet. A scoreless first inning feels intuitive, casual bettors gravitate to it, and that demand
-          can make the opposite side more interesting than it looks at first glance.
+          {copy.whyIntro}
         </p>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/40">
-            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-green-700">Public bias</div>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              NRFI is a heavily favored public betting angle because rooting for no runs feels safer than betting on instant offense.
-              That popularity gives sportsbooks room to price NRFI aggressively.
-            </p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/40">
-            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-green-700">Pricing effect</div>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              When books lean into that demand, YRFI can become the less fashionable side with the more interesting price.
-              The edge is not that YRFI wins more often, it is that the offered odds can be better than the true probability implies.
-            </p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/40">
-            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-green-700">Model goal</div>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              This model exists to estimate fair YRFI probability first, then convert that into a break-even American price.
-              If the market offers a better number than that threshold, the bet is theoretically +EV.
-            </p>
-          </article>
+          {copy.whyCards.map(card => (
+            <article key={card.title} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/40">
+              <div className={`text-[0.68rem] font-semibold uppercase tracking-[0.16em] ${copy.accentText}`}>{card.title}</div>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                {card.body}
+              </p>
+            </article>
+          ))}
         </div>
         <p className="mt-4 text-xs leading-relaxed text-slate-500">
-          That does not mean every YRFI is good or that every NRFI is bad. It means the question is about price, not just outcome.
-          The methodology below is built to answer that pricing question in a consistent way.
+          {copy.whyFootnote}
         </p>
       </Section>
 
@@ -163,8 +273,8 @@ export default function MethodologyView() {
           <InlineMath math={String.raw`\lambda`} /> represents the expected number of runs scored by one team in the first inning.
           The model starts from a baseline of <InlineMath math="0.3371" />{' '}for one team&apos;s half-inning.
           That neutral prior was recalibrated from every completed MLB regular-season game in the pitch-clock era
-          from 2023 through 2025: <InlineMath math="3575 / 7290 \approx 49.05\%" /> YRFI and <InlineMath math="50.95\%" /> NRFI.
-          The model then adjusts each half-inning baseline with seven stabilized inputs plus a lineup-aware top-of-order
+          {' '}{copy.baselineSplit}
+          {' '}The model then adjusts each half-inning baseline with seven stabilized inputs plus a lineup-aware top-of-order
           tweak when a confirmed batting order is posted.
         </p>
         <FormulaBlock math={lambdaMath} align="left" className="mb-6" />
@@ -189,30 +299,26 @@ export default function MethodologyView() {
           values are only used when the starter identity or a required stat feed is actually missing.
           When both teams&apos; confirmed batting orders are factored in, a small{' '}
           <span className="text-[10px] text-slate-400 font-mono">●</span>
-          {' '}appears next to the YRFI percentage. No indicator means the number still uses season team OBP as the lineup proxy.
+          {' '}appears next to the {copy.indicatorLabel} percentage. No indicator means the number still uses season team OBP as the lineup proxy.
         </p>
       </Section>
 
       {/* Step 2 */}
-      <Section title="Step 2 — Compute P(YRFI) from both λ values">
+      <Section title={copy.step2Title}>
         <p className="mb-3 leading-relaxed">
           Under a Poisson model, the probability of scoring <em>zero</em> runs given expected rate{' '}
-          <InlineMath math={String.raw`\lambda`} /> is <InlineMath math={String.raw`e^{-\lambda}`} />. YRFI hits
-          when <em>either</em> team scores, so:
+          <InlineMath math={String.raw`\lambda`} /> is <InlineMath math={String.raw`e^{-\lambda}`} />. {copy.step2Trigger}
         </p>
-        <FormulaBlock math={yrfiMath} className="mb-3" />
+        <FormulaBlock math={copy.probMath} className="mb-3" />
         <p className="mt-3 text-slate-500 text-xs leading-relaxed">
-          This assumes independence between the two half-innings, which is a reasonable approximation
-          since different batters face different pitchers. At league-average inputs both half-innings have
-          <InlineMath math={String.raw`\lambda = 0.3371`} />, which gives <InlineMath math={String.raw`P(\mathrm{YRFI}) = 1 - e^{-0.6742} \approx 49.05\%`} />.
+          {copy.step2Note}
         </p>
       </Section>
 
       {/* Step 3 */}
       <Section title="Step 3 — Convert probability to break-even American odds">
         <p className="mb-3 leading-relaxed">
-          The &quot;Bet at&quot; column shows the worst odds at which a YRFI bet still has positive expected
-          value. If the sportsbook offers better odds than this, the bet is +EV.
+          {copy.step3Lead}
         </p>
         <OddsFormulaBlock math={oddsMath} className="mb-3" />
         <p className="mt-3 text-slate-500 text-xs leading-relaxed">
@@ -251,7 +357,7 @@ export default function MethodologyView() {
               rel="noopener noreferrer"
               className="rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300 transition-colors"
             >
-              <div className="font-semibold text-green-700 mb-1">{s.name}</div>
+              <div className={`font-semibold mb-1 ${copy.accentText}`}>{s.name}</div>
               <div className="text-xs text-slate-500 leading-relaxed">{s.detail}</div>
             </a>
           ))}

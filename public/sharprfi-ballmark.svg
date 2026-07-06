@@ -11,9 +11,9 @@
   </defs>
 
   <g filter="url(#softShadow)">
-    <circle cx="500" cy="500" r="485" fill="#0f6b34"/>
-    <circle cx="500" cy="500" r="460" fill="#178a42"/>
-    <circle cx="500" cy="500" r="440" fill="#0f6b34"/>
+    <circle cx="500" cy="500" r="485" fill="#0f172a"/>
+    <circle cx="500" cy="500" r="460" fill="#334155"/>
+    <circle cx="500" cy="500" r="440" fill="#0f172a"/>
     <circle cx="500" cy="500" r="418" fill="url(#ballGrad)" stroke="#d9d9c9" stroke-width="4"/>
   </g>
 
@@ -23,10 +23,10 @@
   <path d="M778 375 C805 450, 805 550, 778 625" fill="none" stroke="#bdbdaa" stroke-width="4" stroke-linecap="round" opacity="0.85"/>
   <path d="M405 815 C470 835, 530 835, 595 815" fill="none" stroke="#c9c9b8" stroke-width="3" stroke-linecap="round" opacity="0.75"/>
 
-  <path d="M270 270 C360 205, 640 205, 730 270" fill="none" stroke="#0f6b34" stroke-width="10" stroke-linecap="round"/>
-  <path d="M270 730 C360 795, 640 795, 730 730" fill="none" stroke="#0f6b34" stroke-width="10" stroke-linecap="round"/>
+  <path d="M270 270 C360 205, 640 205, 730 270" fill="none" stroke="#0f172a" stroke-width="10" stroke-linecap="round"/>
+  <path d="M270 730 C360 795, 640 795, 730 730" fill="none" stroke="#0f172a" stroke-width="10" stroke-linecap="round"/>
 
-  <g stroke="#0f6b34" stroke-width="10" stroke-linecap="round">
+  <g stroke="#0f172a" stroke-width="10" stroke-linecap="round">
     <path d="M315 305 l22 30"/>
     <path d="M345 290 l20 33"/>
     <path d="M378 278 l18 35"/>
@@ -41,7 +41,7 @@
     <path d="M685 305 l-22 30"/>
   </g>
 
-  <g stroke="#0f6b34" stroke-width="10" stroke-linecap="round">
+  <g stroke="#0f172a" stroke-width="10" stroke-linecap="round">
     <path d="M315 695 l22 -30"/>
     <path d="M345 710 l20 -33"/>
     <path d="M378 722 l18 -35"/>

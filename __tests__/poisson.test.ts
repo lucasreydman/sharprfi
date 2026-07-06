@@ -3,6 +3,7 @@ import {
   dateAdjustedStabilizationSample,
   computeLambda,
   computeYrfiProbability,
+  computeNrfiProbability,
   breakEvenOdds,
   formatOdds,
   stabilizationMultiplierForDate,
@@ -158,6 +159,20 @@ describe('computeYrfiProbability', () => {
     const result = computeYrfiProbability(0.3, 0.4)
     expect(result).toBeGreaterThan(0)
     expect(result).toBeLessThan(1)
+  })
+})
+
+describe('computeNrfiProbability', () => {
+  it('returns correct NRFI probability from two lambdas', () => {
+    // P(NRFI) = e^(-BASE_LAMBDA) * e^(-BASE_LAMBDA) = e^(-0.6742) ≈ 0.5095
+    const result = computeNrfiProbability(BASE_LAMBDA, BASE_LAMBDA)
+    expect(result).toBeCloseTo(0.5095, 3)
+  })
+
+  it('is the exact complement of computeYrfiProbability', () => {
+    for (const [lh, la] of [[0.2, 0.3], [BASE_LAMBDA, BASE_LAMBDA], [0.9, 1.4]]) {
+      expect(computeNrfiProbability(lh, la) + computeYrfiProbability(lh, la)).toBeCloseTo(1, 10)
+    }
   })
 })
 

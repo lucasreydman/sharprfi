@@ -1,8 +1,10 @@
 'use client'
 
 import { createContext, useContext, useState } from 'react'
+import type { ViewMode } from '@/lib/mode'
 
 export interface Settings {
+  mode: ViewMode
   tempUnit: 'F' | 'C'
   windUnit: 'mph' | 'kmh'
   oddsFormat: 'american' | 'decimal'
@@ -10,6 +12,7 @@ export interface Settings {
 }
 
 const DEFAULTS: Settings = {
+  mode: 'yrfi',
   tempUnit: 'F',
   windUnit: 'mph',
   oddsFormat: 'american',
@@ -29,7 +32,7 @@ const SettingsContext = createContext<{
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings>(() => {
     try {
-      const stored = localStorage.getItem('yrfi-settings')
+      const stored = localStorage.getItem('sharprfi-settings')
       if (stored) return { ...DEFAULTS, ...JSON.parse(stored) }
     } catch {}
     return DEFAULTS
@@ -38,7 +41,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   function update(patch: Partial<Settings>) {
     setSettings(prev => {
       const next = { ...prev, ...patch }
-      try { localStorage.setItem('yrfi-settings', JSON.stringify(next)) } catch {}
+      try { localStorage.setItem('sharprfi-settings', JSON.stringify(next)) } catch {}
       return next
     })
   }
