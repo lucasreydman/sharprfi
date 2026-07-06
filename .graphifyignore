@@ -13,3 +13,5 @@ coverage/
 *.zip
 graphify-out/
 
+francisco/
+graphify-out/converted/
