@@ -322,7 +322,7 @@ export default function MethodologyView() {
       {/* Engine 2: Monte Carlo sim */}
       <Section title="Engine 2 — batter-level Monte Carlo simulation">
         <p className="mb-3 leading-relaxed">
-          The second engine was contributed by <strong>Francisco Renteria Nevarez</strong> in July 2026 and
+          The second engine was contributed by <strong>Francisco Nevarez</strong> in July 2026 and
           adapted for this site. For each game it simulates the first inning 10,000 times: every batter in the
           confirmed order gets a reach-base probability from their season{' '}
           <a

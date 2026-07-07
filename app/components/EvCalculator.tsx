@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { impliedProbability, expectedValuePerUnit } from '@/lib/sim'
 import { MODE_LABELS, type ViewMode } from '@/lib/mode'
 
-// Betting-value layer adapted from Francisco Renteria Nevarez's model:
+// Betting-value layer adapted from Francisco Nevarez's model:
 // enter your book's American odds for the active side, get the implied
 // probability, EV per unit vs the model probability, and a banded verdict.
 

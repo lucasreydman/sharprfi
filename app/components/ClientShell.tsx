@@ -241,7 +241,7 @@ function Shell() {
       <footer className="border-t border-slate-100 px-4 py-5 text-sm text-slate-500">
         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
           <span>
-            Built by <span className="font-medium text-slate-600">Lucas Reydman &amp; Francisco Renteria Nevarez</span>
+            Built by <span className="font-medium text-slate-600">Lucas Reydman &amp; Francisco Nevarez</span>
           </span>
         </div>
       </footer>

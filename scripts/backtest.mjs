@@ -268,7 +268,7 @@ async function fetchText(url) {
 }
 
 // ============================================================
-// Monte Carlo sim engine (mirror of lib/sim.ts — Francisco Renteria Nevarez's
+// Monte Carlo sim engine (mirror of lib/sim.ts — Francisco Nevarez's
 // model with agreed fixes; `faithful` option reproduces his original code:
 // no pitcher effect, 4 batters, walks drawn from the hit-type table)
 // ============================================================

@@ -1,4 +1,4 @@
-// Monte Carlo first-inning simulation engine — adapted from Francisco Renteria
+// Monte Carlo first-inning simulation engine — adapted from Francisco
 // Nevarez's NRFI/YRFI model (MLB11.py), with fixes agreed in July 2026:
 // the opposing pitcher now affects reach-base probability (his code computed
 // pitcher OBP-allowed but never used it), the full 9-batter order is simulated

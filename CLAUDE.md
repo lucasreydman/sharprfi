@@ -4,7 +4,7 @@
 
 ## What This Project Is
 
-A Next.js MLB betting tool that models first-inning scoring with **two engines** — the original Poisson model and a batter-level Monte Carlo simulation (contributed by Francisco Renteria Nevarez, July 2026) — and serves **both sides of the bet behind a header toggle**: NRFI (no run in the 1st) and YRFI (at least one run). The headline probability is a 50/50 blend (backtest winner; see `lib/model-config.ts` for the numbers). Users see each game's probability for the active view and the minimum American odds needed for a +EV bet. A manual-odds EV calculator lives in the matchup detail panel; no sportsbook integration.
+A Next.js MLB betting tool that models first-inning scoring with **two engines** — the original Poisson model and a batter-level Monte Carlo simulation (contributed by Francisco Nevarez, July 2026) — and serves **both sides of the bet behind a header toggle**: NRFI (no run in the 1st) and YRFI (at least one run). The headline probability is a 50/50 blend (backtest winner; see `lib/model-config.ts` for the numbers). Users see each game's probability for the active view and the minimum American odds needed for a +EV bet. A manual-odds EV calculator lives in the matchup detail panel; no sportsbook integration.
 
 Formerly two mirrored sites (bet-nrfi / bet-yrfi), merged in July 2026. The API computes the canonical YRFI probability; the NRFI view derives `1 − p`, its own break-even odds, sort order, colors, and copy client-side via `lib/mode.ts`. NRFI mode uses a red accent, YRFI green.
 

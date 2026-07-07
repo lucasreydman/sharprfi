@@ -50,7 +50,7 @@ All sources are free with no API key required.
 Since July 2026 the headline probability is a **50/50 blend of two engines** (see `lib/model-config.ts`):
 
 1. **Poisson model** (original) — expected first-inning runs (λ) per half-inning, described below.
-2. **Monte Carlo simulation** (`lib/sim.ts`) — a batter-level engine contributed by Francisco Renteria Nevarez and adapted for this site: each confirmed batter's season wOBA (FanGraphs weights, shrunk toward league average by `min(PA/30, 1)`), platoon-adjusted against the starter's handedness, multiplied by the starter's shrunk OBP-allowed relative to league, √park factor, and a global calibration constant (`1.2333`, tuned so league-average inputs reproduce the 49.05% base rate). Each game is simulated 10,000 times with a seeded PRNG (seed = gamePk, deterministic), walks advancing runners only when forced and hits split 65/20/3/12 by type.
+2. **Monte Carlo simulation** (`lib/sim.ts`) — a batter-level engine contributed by Francisco Nevarez and adapted for this site: each confirmed batter's season wOBA (FanGraphs weights, shrunk toward league average by `min(PA/30, 1)`), platoon-adjusted against the starter's handedness, multiplied by the starter's shrunk OBP-allowed relative to league, √park factor, and a global calibration constant (`1.2333`, tuned so league-average inputs reproduce the 49.05% base rate). Each game is simulated 10,000 times with a seeded PRNG (seed = gamePk, deterministic), walks advancing runners only when forced and hits split 65/20/3/12 by type.
 
 On the 2026-03-26 → 2026-07-05 backtest (1,344 games, `npm run backtest -- 2026-03-26 2026-07-05 --compare-sim`):
 
