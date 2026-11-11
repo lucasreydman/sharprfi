@@ -16,10 +16,10 @@ export const metadata: Metadata = {
   description: metadataDescription,
   icons: {
     icon: [
-      { url: '/sharprfi-ballmark.svg', type: 'image/svg+xml' },
+      { url: '/sharprfi-mark.svg', type: 'image/svg+xml' },
     ],
-    shortcut: '/sharprfi-ballmark.svg',
-    apple: '/sharprfi-ballmark.svg',
+    shortcut: '/sharprfi-mark.svg',
+    apple: '/sharprfi-mark.svg',
   },
   openGraph: {
     title: metadataTitle,
