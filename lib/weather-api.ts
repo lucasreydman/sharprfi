@@ -48,7 +48,10 @@ export function getStadiumConstants(venueId: number): StadiumConstants | null {
   return STADIUMS[venueId] ?? null
 }
 
-// Fetches hourly weather from Open-Meteo and picks the slot closest to gameTime
+// Fetches hourly weather from Open-Meteo and picks the slot closest to gameTime.
+// The hours are requested in UTC and parsed as UTC. Open-Meteo returns them
+// with no offset ("2026-07-06T23:00"), so asking for the stadium's local time
+// and parsing on a UTC server put every reading off by the park's UTC offset.
 export async function fetchWeather(
   venueId: number,
   gameTimeIso: string
@@ -76,7 +79,7 @@ export async function fetchWeather(
     url.searchParams.set('hourly', 'temperature_2m,wind_speed_10m,wind_direction_10m')
     url.searchParams.set('temperature_unit', 'fahrenheit')
     url.searchParams.set('wind_speed_unit', 'mph')
-    url.searchParams.set('timezone', 'auto')
+    url.searchParams.set('timezone', 'GMT')
     if (isHistoricalDate) {
       url.searchParams.set('start_date', gameDate)
       url.searchParams.set('end_date', gameDate)
@@ -97,7 +100,7 @@ export async function fetchWeather(
     let closestIdx = 0
     let minDiff = Infinity
     for (let i = 0; i < hours.length; i++) {
-      const diff = Math.abs(new Date(hours[i]).getTime() - gameMs)
+      const diff = Math.abs(new Date(`${hours[i]}Z`).getTime() - gameMs)
       if (diff < minDiff) { minDiff = diff; closestIdx = i }
     }
 

@@ -143,9 +143,16 @@ export function computeNrfiProbability(lambdaHome: number, lambdaAway: number): 
   return Math.exp(-lambdaHome) * Math.exp(-lambdaAway)
 }
 
+// The price is shown as "X or better", so it must never include a losing bet:
+// round toward the bettor. For a favorite the better price is the smaller
+// number (-156 beats -157), so the magnitude rounds down. For an underdog the
+// better price is the larger number, so it rounds up. The epsilon keeps a value
+// that is a whole number in exact math (150 at p = 0.6) from tipping over on
+// floating point error.
 export function breakEvenOdds(p: number): number {
-  if (p >= 0.5) return -Math.ceil((100 * p) / (1 - p))
-  return Math.ceil((100 * (1 - p)) / p)
+  const EPS = 1e-9
+  if (p >= 0.5) return -Math.floor((100 * p) / (1 - p) + EPS)
+  return Math.ceil((100 * (1 - p)) / p - EPS)
 }
 
 export function formatOdds(odds: number, estimated: boolean): string {

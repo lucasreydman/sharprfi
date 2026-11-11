@@ -186,9 +186,21 @@ describe('breakEvenOdds', () => {
   it('returns -100 at exactly p = 0.5', () => {
     expect(breakEvenOdds(0.50)).toBe(-100)
   })
-  it('uses Math.ceil (rounds up for conservative threshold)', () => {
-    // p = 0.45 → 100*(0.55)/0.45 = 122.22 → ceil → 123
+  it('rounds an underdog price up, so "or better" never includes a losing bet', () => {
+    // p = 0.45 → 100*(0.55)/0.45 = 122.22 → 123
     expect(breakEvenOdds(0.45)).toBe(123)
+  })
+  it('rounds a favorite price toward the bettor too', () => {
+    // p = 0.61 → 100*0.61/0.39 = 156.41. -157 would need 61.09% to break even,
+    // which is a losing bet at 61%, so the threshold is -156.
+    expect(breakEvenOdds(0.61)).toBe(-156)
+  })
+  it('never quotes a price that loses at the stated probability', () => {
+    for (let p = 0.05; p < 0.95; p += 0.0137) {
+      const odds = breakEvenOdds(p)
+      const needed = odds < 0 ? -odds / (-odds + 100) : 100 / (odds + 100)
+      expect(needed).toBeLessThanOrEqual(p + 1e-9)
+    }
   })
 })
 
